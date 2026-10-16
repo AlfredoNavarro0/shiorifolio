@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ShioriFolio — Open Book and Bookmark Emblem">
+  <!-- Background Medallion -->
+  <circle cx="32" cy="32" r="30.5" fill="#ebeee7" />
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#2b3a30" stroke-width="2.1" />
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#2b3a30" stroke-width="0.8" opacity="0.45" />
+
+  <!-- Rising Reading Light / Nib Star -->
+  <path d="M32 9.5 L33.8 15.2 L39.5 17.0 L33.8 18.8 L32 24.5 L30.2 18.8 L24.5 17.0 L30.2 15.2 Z" fill="#2b3a30" />
+  <line x1="23" y1="11.5" x2="26.5" y2="14" stroke="#2b3a30" stroke-width="1.1" stroke-linecap="round" opacity="0.65" />
+  <line x1="41" y1="11.5" x2="37.5" y2="14" stroke="#2b3a30" stroke-width="1.1" stroke-linecap="round" opacity="0.65" />
+
+  <!-- Open Folio Book: Left & Right Pages -->
+  <path d="M32 26 C27 23.2, 19.5 22.8, 13.5 24.8 L13.5 43.5 C19.5 41.5, 27 42.0, 32 45.0 Z" fill="#ebeee7" stroke="#2b3a30" stroke-width="1.9" stroke-linejoin="round" />
+  <path d="M32 26 C37 23.2, 44.5 22.8, 50.5 24.8 L50.5 43.5 C44.5 41.5, 37 42.0, 32 45.0 Z" fill="#2b3a30" fill-opacity="0.14" stroke="#2b3a30" stroke-width="1.9" stroke-linejoin="round" />
+
+  <!-- Engraved Manuscript Lines -->
+  <g stroke="#2b3a30" stroke-width="1.0" stroke-linecap="round" opacity="0.72">
+    <line x1="17.2" y1="29.5" x2="28.2" y2="30.5" />
+    <line x1="17.2" y1="33.9" x2="28.2" y2="34.9" />
+    <line x1="17.2" y1="38.3" x2="28.2" y2="39.3" />
+    <line x1="35.8" y1="30.5" x2="46.8" y2="29.5" />
+    <line x1="35.8" y1="34.9" x2="46.8" y2="33.9" />
+    <line x1="35.8" y1="39.3" x2="46.8" y2="38.3" />
+  </g>
+
+  <!-- Outer Book Cover Edges -->
+  <line x1="12" y1="45.5" x2="29.5" y2="46.8" stroke="#2b3a30" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="52" y1="45.5" x2="34.5" y2="46.8" stroke="#2b3a30" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- Shiori (栞) Swallowtail Bookmark Ribbon -->
+  <path d="M29.4 44.2 L34.6 44.2 L34.6 56.5 L32.0 53.6 L29.4 56.5 Z" fill="#2b3a30" stroke="#2b3a30" stroke-width="1.0" stroke-linejoin="round" />
+
+  <!-- Spine Eyelet -->
+  <circle cx="32" cy="35" r="1.5" fill="#ebeee7" stroke="#2b3a30" stroke-width="1.0" />
+</svg>

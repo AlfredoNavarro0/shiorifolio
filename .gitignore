@@ -1,0 +1,13 @@
+# Gradle & Build outputs
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration & IDE files
+local.properties
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db
