@@ -1,5 +1,6 @@
 package dev.meridian.folio.ui.theme
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -125,5 +126,33 @@ class ClayComponentsTest {
         onNodeWithTag("reader_tone_SAGE").performClick()
         waitForIdle()
         assertEquals(ReaderTheme.SAGE, selected)
+    }
+
+    @Test
+    fun progressFractionIsClampedToUnitRange() {
+        assertEquals(0f, clayProgressFraction(0f))
+        assertEquals(1f, clayProgressFraction(1f))
+        assertEquals(0f, clayProgressFraction(-1f))
+        assertEquals(1f, clayProgressFraction(2f))
+        assertEquals(0.4f, clayProgressFraction(0.4f))
+    }
+
+    @Test
+    fun progressBarRendersClampedProgressWithoutCrashing() = runComposeUiTest {
+        setContent {
+            ClayTheme {
+                Column {
+                    ClayProgressBar(0f, tag = "progress_0")
+                    ClayProgressBar(1f, tag = "progress_1")
+                    ClayProgressBar(-1f, tag = "progress_negative")
+                    ClayProgressBar(2f, tag = "progress_over")
+                }
+            }
+        }
+        waitForIdle()
+        onNodeWithTag("progress_0").assertExists()
+        onNodeWithTag("progress_1").assertExists()
+        onNodeWithTag("progress_negative").assertExists()
+        onNodeWithTag("progress_over").assertExists()
     }
 }

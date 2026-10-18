@@ -33,6 +33,10 @@ import dev.meridian.folio.core.ReaderTheme
 /**
  * Frosted clay card: multi-layer clay shadow ([ClayShadows.card]) around a translucent
  * `cardSurface` layer with blur ([Modifier.clayFrosted]) and a 28.dp radius.
+ *
+ * The card is sized by its caller: the shadow and frosted layers are `matchParentSize`,
+ * so pass explicit constraints (e.g. `Modifier.fillMaxWidth()` plus a height) — with
+ * loose constraints the card renders 0×0.
  */
 @Composable
 fun ClayCard(
@@ -81,6 +85,9 @@ fun ClayPrimaryButton(
             Modifier
                 .clip(shape)
                 .background(background)
+                // The opaque gradient hides the shadow box's behind-content inset
+                // layers, so they are repainted over the surface, clipped to it.
+                .clayInsetOverlay(shape, ClayShadows.button.inner)
                 .clayFocusableClickable(palette, shape = shape, enabled = enabled, onClick = onClick)
                 .then(if (tag != null) Modifier.testTag(tag) else Modifier)
                 .padding(horizontal = ClaySpacing.lg),
@@ -137,8 +144,14 @@ fun ClaySecondaryButton(
  * `primary`/`onPrimary` when [selected], otherwise `surfaceContainerHigh`/`onSurface`
  * with a subtle border. The label font follows [LocalClayUiAppearance].
  *
- * The positional signature mirrors the retired `ModernChromeAction`, so call sites are a
- * pure rename.
+ * The positional signature mirrors the retired `ModernChromeAction` (f0edce9), so call
+ * sites are a pure rename. Behavior parity with it: min height 40.dp, horizontal 12.dp /
+ * vertical 10.dp padding, font size `appearance.fontSizeSp.coerceIn(11f, 15f).sp`,
+ * weight from the appearance (SemiBold when selected), `testTag` + `contentDescription`.
+ * Deliberate deviations (clay redesign): fully-rounded pill instead of 12.dp corners,
+ * `primary`/`onPrimary` when selected instead of the old accent/transparent pair,
+ * opaque `surfaceContainerHigh` with a subtle border when not selected, and a
+ * `clayFocusableClickable` focus ring instead of `Surface`.
  */
 @Composable
 fun ClayChromeAction(
@@ -279,14 +292,18 @@ fun ClaySegmentedTabs(
     }
 }
 
+/** Progress coerced to the [0f, 1f] range used to size the fill. */
+fun clayProgressFraction(progress: Float): Float = progress.coerceIn(0f, 1f)
+
 /**
  * Reading progress bar: `surfaceContainerHigh` track with a `primary → primaryDeep`
- * gradient fill, fully rounded and 8.dp tall.
+ * gradient fill, fully rounded and 8.dp tall. [progress] is clamped to [0f, 1f].
  */
 @Composable
 fun ClayProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
+    tag: String? = null,
     palette: ClayPalette = LocalClayPalette.current,
 ) {
     val shape = RoundedCornerShape(percent = 50)
@@ -295,11 +312,12 @@ fun ClayProgressBar(
             .fillMaxWidth()
             .height(8.dp)
             .clip(shape)
-            .background(palette.surfaceContainerHigh),
+            .background(palette.surfaceContainerHigh)
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier),
     ) {
         Box(
             Modifier
-                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .fillMaxWidth(clayProgressFraction(progress))
                 .fillMaxHeight()
                 .clip(shape)
                 .background(Brush.horizontalGradient(listOf(palette.primary, palette.primaryDeep))),
