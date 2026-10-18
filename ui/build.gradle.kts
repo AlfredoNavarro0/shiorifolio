@@ -28,6 +28,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(libs.compose.material3)
             implementation(compose.ui)
+            implementation(compose.components.resources)
         }
         getByName("desktopTest").dependencies {
             implementation(kotlin("test"))
