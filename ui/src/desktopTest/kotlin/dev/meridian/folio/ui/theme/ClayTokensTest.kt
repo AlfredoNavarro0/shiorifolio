@@ -26,7 +26,8 @@ class ClayTokensTest {
         assertEquals(Color(0xFFCCC3D8), palette.outlineVariant)
         assertEquals(Color(0xFF10B981), palette.successMint)
         assertEquals(Color(0xFFBA1A1A), palette.error)
-        assertEquals(0.75f, palette.cardSurface.alpha)
+        // Compose packs alpha as 8-bit: 0.75 -> 191/255 = 0.7490196.
+        assertEquals(0.75f, palette.cardSurface.alpha, 1f / 255f)
         assertFalse(palette.isDarkReading)
     }
 
