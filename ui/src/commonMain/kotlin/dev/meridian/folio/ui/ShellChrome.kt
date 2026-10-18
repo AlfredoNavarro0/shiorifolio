@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -104,10 +105,15 @@ fun ClayLogoMark(size: Dp = 34.dp, modifier: Modifier = Modifier) {
 }
 
 /**
- * Clay top navigation: a floating card ([ClayCard] over [dev.meridian.folio.ui.theme.ClayShadows.floating])
- * holding the logo mark, the wordmark, the four section tabs (`section_tab_<NAME>`) and the
- * theme toggle (`theme_toggle_button`). Only the light chrome palette is used: the shell
- * never follows the reading sheet tone.
+ * Clay top navigation: a floating [ClayCard] (multi-layer clay card shadow over a frosted
+ * `cardSurface`) holding the logo mark, the wordmark, the four section tabs
+ * (`section_tab_<NAME>`) and the theme toggle (`theme_toggle_button`). Only the light chrome
+ * palette is used: the shell never follows the reading sheet tone.
+ *
+ * The card is explicitly sized (`fillMaxWidth()` + a minimum height): [ClayCard] mirrors its
+ * shadow and frosted layers with `matchParentSize` children, so it cannot size itself. The
+ * tabs row takes the remaining width and scrolls horizontally when the four labels no longer
+ * fit (narrow windows or a raised UI scale). Container tag: `clay_top_nav`.
  */
 @Composable
 fun ClayTopNav(
@@ -173,9 +179,24 @@ fun ClayTopNav(
     }
 }
 
+/** Card height of [ClayBottomNav]: one [ClayChromeAction] pill row plus its own padding. */
+val ClayBottomNavCardHeight: Dp = 60.dp
+
+/**
+ * Vertical space [ClayBottomNav] occupies on screen: its card ([ClayBottomNavCardHeight])
+ * plus the padding the component adds above and below it. Hosts that reserve room for the
+ * compact chrome (the mobile Kindle reader's reading canvases) use exactly this value, so the
+ * last line of a page never sits under the bar. `ClayShellTest` pins the rendered bounds.
+ */
+val ClayBottomNavHeight: Dp = ClayBottomNavCardHeight + ClaySpacing.xs * 2
+
 /**
  * Compact clay bottom navigation for the mobile / Kindle layout. Shares the
  * `section_tab_<NAME>` tags with [ClayTopNav]; both are never rendered at the same time.
+ *
+ * The tab row fills the bar when the four tabs fit and scrolls horizontally when they do
+ * not (narrow compact widths or a raised UI scale), so every section stays reachable.
+ * Container tag: `clay_bottom_nav`; scrollable tab row: `clay_bottom_nav_tabs`.
  */
 @Composable
 fun ClayBottomNav(
@@ -188,22 +209,32 @@ fun ClayBottomNav(
         ClayCard(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
+                .heightIn(min = ClayBottomNavCardHeight)
                 .testTag("clay_bottom_nav"),
         ) {
-            Row(
+            BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth().padding(ClaySpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                contentAlignment = Alignment.Center,
             ) {
-                MeridianSection.entries.forEach { section ->
-                    ClayChromeAction(
-                        section.stitchTabTitle,
-                        palette,
-                        "section_tab_${section.name}",
-                        section == activeSection,
-                    ) {
-                        onSelectSection(section)
+                Row(
+                    modifier = Modifier
+                        // Widen to the bar so the tabs spread evenly while they fit; beyond
+                        // that the row keeps its intrinsic width and scrolls.
+                        .widthIn(min = maxWidth)
+                        .horizontalScroll(rememberScrollState())
+                        .testTag("clay_bottom_nav_tabs"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    MeridianSection.entries.forEach { section ->
+                        ClayChromeAction(
+                            section.stitchTabTitle,
+                            palette,
+                            "section_tab_${section.name}",
+                            section == activeSection,
+                        ) {
+                            onSelectSection(section)
+                        }
                     }
                 }
             }
@@ -340,83 +371,79 @@ fun ClayReaderToolbar(
 ) {
     var showTools by remember { mutableStateOf(false) }
     val navShape = RoundedCornerShape(ClayRadius.base)
-    Column(
+    Row(
         modifier = Modifier
             .widthIn(max = 1440.dp)
             .fillMaxWidth()
             .padding(bottom = ClaySpacing.sm),
-        verticalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
+            modifier = Modifier
+                .clip(navShape)
+                .background(palette.surfaceContainerHigh)
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(navShape)
-                    .background(palette.surfaceContainerHigh)
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                ClayChromeAction(
-                    "←",
-                    palette,
-                    "nav_history_back_btn",
-                    enabled = back != null,
-                    description = "Volver en el historial",
-                    onClick = onBack,
+            ClayChromeAction(
+                "←",
+                palette,
+                "nav_history_back_btn",
+                enabled = back != null,
+                description = "Volver en el historial",
+                onClick = onBack,
+            )
+            ClayChromeAction(
+                "→",
+                palette,
+                "nav_history_forward_btn",
+                enabled = forward != null,
+                description = "Avanzar en el historial",
+                onClick = onForward,
+            )
+        }
+        Column(Modifier.weight(1f).padding(start = ClaySpacing.xs)) {
+            Text(
+                book.title,
+                color = palette.onSurface,
+                style = LocalClayTypography.current.titleMd,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                book.author,
+                color = palette.onSurfaceVariant,
+                style = LocalClayTypography.current.bodySm,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (book.tableOfContents.size > 1) {
+            ClayChromeAction("☰  Capítulos", palette, "toc_toggle_btn", showToc, onClick = onToc)
+        }
+        ZoomAndFitControlStrip(palette, fitMode, zoomScale, onFit, onZoom)
+        Box {
+            ClayChromeAction(
+                "⋯",
+                palette,
+                "reader_tools_menu",
+                description = "Herramientas del libro",
+            ) { showTools = true }
+            DropdownMenu(showTools, { showTools = false }) {
+                DropdownMenuItem(
+                    text = { Text("$phraseCount anotaciones") },
+                    onClick = { showTools = false; onNotebook() },
+                    modifier = Modifier.testTag("reader_notebook"),
                 )
-                ClayChromeAction(
-                    "→",
-                    palette,
-                    "nav_history_forward_btn",
-                    enabled = forward != null,
-                    description = "Avanzar en el historial",
-                    onClick = onForward,
-                )
-            }
-            Column(Modifier.weight(1f).padding(start = ClaySpacing.xs)) {
-                Text(
-                    book.title,
-                    color = palette.onSurface,
-                    style = LocalClayTypography.current.titleMd,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    book.author,
-                    color = palette.onSurfaceVariant,
-                    style = LocalClayTypography.current.bodySm,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (book.tableOfContents.size > 1) {
-                ClayChromeAction("☰  Capítulos", palette, "toc_toggle_btn", showToc, onClick = onToc)
-            }
-            ZoomAndFitControlStrip(palette, fitMode, zoomScale, onFit, onZoom)
-            Box {
-                ClayChromeAction(
-                    "⋯",
-                    palette,
-                    "reader_tools_menu",
-                    description = "Herramientas del libro",
-                ) { showTools = true }
-                DropdownMenu(showTools, { showTools = false }) {
-                    DropdownMenuItem(
-                        text = { Text("$phraseCount anotaciones") },
-                        onClick = { showTools = false; onNotebook() },
-                        modifier = Modifier.testTag("reader_notebook"),
-                    )
-                    if (book.format == DocumentFormat.PDF) {
-                        HorizontalDivider()
-                        PdfPageColorMode.entries.forEach { mode ->
-                            DropdownMenuItem(
-                                text = { Text((if (mode == pdfColorMode) "✓  " else "") + mode.shortLabel) },
-                                onClick = { onPdfColor(mode); showTools = false },
-                                modifier = Modifier.testTag("reader_pdf_color_${mode.name}"),
-                            )
-                        }
+                if (book.format == DocumentFormat.PDF) {
+                    HorizontalDivider()
+                    PdfPageColorMode.entries.forEach { mode ->
+                        DropdownMenuItem(
+                            text = { Text((if (mode == pdfColorMode) "✓  " else "") + mode.shortLabel) },
+                            onClick = { onPdfColor(mode); showTools = false },
+                            modifier = Modifier.testTag("reader_pdf_color_${mode.name}"),
+                        )
                     }
                 }
             }

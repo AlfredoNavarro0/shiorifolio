@@ -2673,7 +2673,8 @@ private fun StitchMobileKindleReaderLayout(
                         .fillMaxSize()
                         .padding(
                             top = if (hudVisible) 68.dp else 8.dp,
-                            bottom = if (hudVisible) 96.dp else 12.dp,
+                            // The compact HUD stacks pace pill + page dock + clay bottom nav.
+                            bottom = if (hudVisible) 96.dp + ClayBottomNavHeight else 12.dp,
                         ),
                 ) {
                     VerticalPaginatedReaderCanvas(
@@ -2698,7 +2699,8 @@ private fun StitchMobileKindleReaderLayout(
                         .fillMaxSize()
                         .padding(
                             top = if (hudVisible) 68.dp else 8.dp,
-                            bottom = if (hudVisible) 96.dp else 12.dp,
+                            // The compact HUD stacks pace pill + page dock + clay bottom nav.
+                            bottom = if (hudVisible) 96.dp + ClayBottomNavHeight else 12.dp,
                         ),
                 ) {
                     VerticalContinuousReaderCanvas(
@@ -2728,7 +2730,8 @@ private fun StitchMobileKindleReaderLayout(
                         .fillMaxSize()
                         .padding(
                             top = if (hudVisible) 68.dp else 8.dp,
-                            bottom = if (hudVisible) 96.dp else 12.dp,
+                            // The compact HUD stacks pace pill + page dock + clay bottom nav.
+                            bottom = if (hudVisible) 96.dp + ClayBottomNavHeight else 12.dp,
                         ),
                 ) {
                     AdaptiveReflowReaderCanvas(
@@ -2766,7 +2769,8 @@ private fun StitchMobileKindleReaderLayout(
                                 .fillMaxSize()
                                 .padding(
                                     top = if (hudVisible) 68.dp else 12.dp,
-                                    bottom = if (hudVisible) 96.dp else 16.dp,
+                                    // Reserve the whole compact HUD stack, nav included.
+                                    bottom = if (hudVisible) 96.dp + ClayBottomNavHeight else 16.dp,
                                     start = 10.dp,
                                     end = 10.dp,
                                 )
@@ -2791,7 +2795,8 @@ private fun StitchMobileKindleReaderLayout(
                         bookTypography, onQuickSavePhrase,
                         Modifier.fillMaxSize().padding(
                             top = if (hudVisible) 76.dp else 20.dp,
-                            bottom = if (hudVisible) 110.dp else 28.dp,
+                            // Reserve the whole compact HUD stack, nav included.
+                            bottom = if (hudVisible) 110.dp + ClayBottomNavHeight else 28.dp,
                             start = horizontalPad, end = horizontalPad,
                         ),
                     )
