@@ -215,13 +215,14 @@ object ClayTypeScale {
     val labelSm = ClayTypeSpec(fontSizeSp = 10f, lineHeightSp = 14f, weight = FontWeight.Bold, letterSpacingEm = 0.04f)
 }
 
-/** One layer of a clay shadow stack. */
+/** One layer of a clay shadow stack. `spread` insets/expands the layer (negative shrinks it). */
 @Immutable
 data class ClayShadowLayer(
     val dx: Dp,
     val dy: Dp,
     val blur: Dp,
     val color: Color,
+    val spread: Dp = 0.dp,
 )
 
 /** Multi-layer clay shadow: outer (drop) layers plus inner (inset) layers. */
@@ -262,8 +263,10 @@ object ClayShadows {
     )
     val floating = ClayShadowStack(
         outer = listOf(
-            ClayShadowLayer(0.dp, 20.dp, 35.dp, Color(0x337C3AED)),
-            ClayShadowLayer(0.dp, 10.dp, 15.dp, Color(0x0A000000)),
+            // 0 20px 35px -8px rgba(124,58,237,0.2)
+            ClayShadowLayer(0.dp, 20.dp, 35.dp, Color(0x337C3AED), spread = (-8).dp),
+            // 0 10px 15px -5px rgba(0,0,0,0.04)
+            ClayShadowLayer(0.dp, 10.dp, 15.dp, Color(0x0A000000), spread = (-5).dp),
         ),
         inner = emptyList(),
     )

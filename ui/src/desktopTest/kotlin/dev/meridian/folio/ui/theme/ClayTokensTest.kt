@@ -66,29 +66,91 @@ class ClayTokensTest {
             assertEquals(16.dp, dx)
             assertEquals(16.dp, dy)
             assertEquals(32.dp, blur)
+            assertEquals(0.dp, spread)
             assertEquals(Color(0x38A096B4), color)
         }
         with(card.outer[1]) {
             assertEquals((-10).dp, dx)
             assertEquals((-10).dp, dy)
             assertEquals(24.dp, blur)
+            assertEquals(0.dp, spread)
             assertEquals(Color(0xF2FFFFFF), color)
         }
         with(card.inner[0]) {
             assertEquals(6.dp, dx)
             assertEquals(6.dp, dy)
             assertEquals(12.dp, blur)
+            assertEquals(0.dp, spread)
             assertEquals(Color(0x0A8B5CF6), color)
         }
         with(card.inner[1]) {
             assertEquals((-6).dp, dx)
             assertEquals((-6).dp, dy)
             assertEquals(12.dp, blur)
+            assertEquals(0.dp, spread)
             assertEquals(Color(0xFFFFFFFF), color)
         }
         // Pressed is purely recessed: no outer drop layers.
         assertTrue(ClayShadows.pressed.outer.isEmpty())
         assertEquals(2, ClayShadows.pressed.inner.size)
+    }
+
+    @Test
+    fun buttonShadowStackHasLiteralDesignMdLayers() {
+        val button = ClayShadows.button
+        assertEquals(2, button.outer.size)
+        assertEquals(2, button.inner.size)
+        with(button.outer[0]) {
+            assertEquals(10.dp, dx)
+            assertEquals(10.dp, dy)
+            assertEquals(20.dp, blur)
+            assertEquals(0.dp, spread)
+            assertEquals(Color(0x477C3AED), color)
+        }
+        with(button.outer[1]) {
+            assertEquals((-6).dp, dx)
+            assertEquals((-6).dp, dy)
+            assertEquals(14.dp, blur)
+            assertEquals(0.dp, spread)
+            assertEquals(Color(0xB3FFFFFF), color)
+        }
+        with(button.inner[0]) {
+            assertEquals(3.dp, dx)
+            assertEquals(3.dp, dy)
+            assertEquals(6.dp, blur)
+            assertEquals(0.dp, spread)
+            assertEquals(Color(0x66FFFFFF), color)
+        }
+        with(button.inner[1]) {
+            assertEquals((-3).dp, dx)
+            assertEquals((-3).dp, dy)
+            assertEquals(6.dp, blur)
+            assertEquals(0.dp, spread)
+            assertEquals(Color(0x1F000000), color)
+        }
+    }
+
+    @Test
+    fun floatingShadowStackCarriesLiteralDesignMdLayersAndSpread() {
+        val floating = ClayShadows.floating
+        assertTrue(floating.inner.isEmpty())
+        assertEquals(2, floating.outer.size)
+        // 0 20px 35px -8px rgba(124,58,237,0.2)
+        with(floating.outer[0]) {
+            assertEquals(0.dp, dx)
+            assertEquals(20.dp, dy)
+            assertEquals(35.dp, blur)
+            assertEquals((-8).dp, spread)
+            assertEquals(Color(0x337C3AED), color)
+        }
+        // 0 10px 15px -5px rgba(0,0,0,0.04)
+        with(floating.outer[1]) {
+            assertEquals(0.dp, dx)
+            assertEquals(10.dp, dy)
+            assertEquals(15.dp, blur)
+            assertEquals((-5).dp, spread)
+            assertEquals(Color(0x0A000000), color)
+        }
     }
 
     @Test
