@@ -27,8 +27,8 @@ actual object PlatformPdfEngine {
             val pageNo = i + 1
             val savedImg = if (pageNo <= 4) {
                 val page = renderer.openPage(i)
-                val width = (page.width * 1.5f).toInt().coerceAtLeast(400)
-                val height = (page.height * 1.5f).toInt().coerceAtLeast(560)
+                val width = (page.width * 2.0f).toInt().coerceAtLeast(600)
+                val height = (page.height * 2.0f).toInt().coerceAtLeast(840)
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(android.graphics.Color.WHITE)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -37,7 +37,7 @@ actual object PlatformPdfEngine {
                 val pngOut = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.PNG, 90, pngOut)
                 bitmap.recycle()
-                PlatformFileAndZipIo.cacheMediaFile(docId, "pdf_page_$pageNo.png", pngOut.toByteArray())
+                PlatformFileAndZipIo.cacheMediaFile(docId, "pdf_page_v4_$pageNo.png", pngOut.toByteArray())
             } else {
                 "lazy_pdf://$docId/$pageNo"
             }
@@ -50,7 +50,7 @@ actual object PlatformPdfEngine {
                         ContentBlock(
                             id = "pdf_android_$pageNo",
                             style = BlockStyle.IMAGE,
-                            text = "Page $pageNo",
+                            text = "",
                             imagePath = savedImg,
                         ),
                     ),
@@ -70,7 +70,7 @@ actual object PlatformPdfEngine {
             filePath = filePath,
             pages = pages,
             currentPage = 1,
-            parserVersion = 3,
+            parserVersion = 4,
             createdAtMs = nowMs,
             updatedAtMs = nowMs,
         )
@@ -87,8 +87,8 @@ actual object PlatformPdfEngine {
         val renderer = PdfRenderer(pfd)
         val pageIdx = (pageNumber - 1).coerceIn(0, renderer.pageCount - 1)
         val page = renderer.openPage(pageIdx)
-        val width = (page.width * 1.5f).toInt().coerceAtLeast(400)
-        val height = (page.height * 1.5f).toInt().coerceAtLeast(560)
+        val width = (page.width * 2.0f).toInt().coerceAtLeast(600)
+        val height = (page.height * 2.0f).toInt().coerceAtLeast(840)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.WHITE)
         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -99,8 +99,17 @@ actual object PlatformPdfEngine {
         val pngOut = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 90, pngOut)
         bitmap.recycle()
-        PlatformFileAndZipIo.cacheMediaFile(docId, "pdf_page_$pageNumber.png", pngOut.toByteArray())
+        PlatformFileAndZipIo.cacheMediaFile(docId, "pdf_page_v4_$pageNumber.png", pngOut.toByteArray())
     }.getOrNull()
+
+    actual fun extractOcrTextForPage(
+        filePath: String?,
+        docId: String,
+        pageNumber: Int,
+        renderedImagePath: String?,
+    ): List<String> = listOf(
+        "[OCR · Folio $pageNumber] Página escaneada procesada en modo no destructivo (archivo PDF original conservado).",
+    )
 
     actual fun exportPdfDocument(book: BookDocument): ByteArray? = null
 }

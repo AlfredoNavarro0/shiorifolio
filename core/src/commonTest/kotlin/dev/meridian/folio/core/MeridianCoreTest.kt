@@ -114,4 +114,96 @@ class MeridianCoreTest {
         assertTrue(fullBookText.contains("Seeing you with your foot in the gutter is kinda eye-catching"))
         assertTrue(fullBookText.contains("Sandai lent his own clothes to Shino"))
     }
+
+    @Test
+    fun perBookViewPreferenceRemembersViewModeFitZoomAndPositionPerBook() {
+        val repo = FolioRepository(persistToDisk = false)
+        val docs = repo.state.value.documents
+        assertTrue(docs.size >= 2)
+        val bookA = docs[0]
+        val bookB = docs[1]
+
+        repo.selectBook(bookA.id)
+        repo.setViewMode(PageViewMode.VERTICAL_CONTINUOUS)
+        repo.setPageFitMode(PageFitMode.MANUAL_ZOOM)
+        repo.setZoomScale(1.45f)
+        repo.goToPage(bookA.id, 3)
+
+        repo.selectBook(bookB.id)
+        repo.setViewMode(PageViewMode.REFLOW_TEXT)
+        repo.setPageFitMode(PageFitMode.FIT_WIDTH)
+        repo.goToPage(bookB.id, 2)
+
+        // Switch back to bookA and verify its viewMode, fitMode, zoomScale, and lastPage are restored
+        repo.selectBook(bookA.id)
+        assertEquals(PageViewMode.VERTICAL_CONTINUOUS, repo.state.value.viewMode)
+        assertEquals(PageFitMode.MANUAL_ZOOM, repo.state.value.fitMode)
+        assertEquals(1.45f, repo.state.value.zoomScale)
+        assertEquals(3, repo.currentBook()!!.currentPage)
+
+        // Switch back to bookB and verify its preferences are restored
+        repo.selectBook(bookB.id)
+        assertEquals(PageViewMode.REFLOW_TEXT, repo.state.value.viewMode)
+        assertEquals(PageFitMode.FIT_WIDTH, repo.state.value.fitMode)
+        assertEquals(2, repo.currentBook()!!.currentPage)
+    }
+
+    @Test
+    fun pdfReflowEngineJoinsSplitParagraphsStripsHeadersAndDetectsHyphenationAndSceneBreaks() {
+        val syntheticPdf = BookDocument(
+            id = "test-pdf-reflow",
+            title = "Treatise on Bridges",
+            subtitle = "Edition I",
+            author = "A. Verdigris",
+            format = DocumentFormat.PDF,
+            currentPage = 1,
+            pages = listOf(
+                BookPage(
+                    pageNumber = 1,
+                    chapterTitle = "Chapter I",
+                    blocks = listOf(
+                        ContentBlock("b1", BlockStyle.PARAGRAPH, "SHIORIFOLIO · FOLIO 1"),
+                        ContentBlock(
+                            "b2",
+                            BlockStyle.PARAGRAPH,
+                            "The archi-\ntectural span of the viaduct was designed to endure centuries, and it was built in",
+                        ),
+                        ContentBlock("b3", BlockStyle.PARAGRAPH, "1"),
+                    ),
+                ),
+                BookPage(
+                    pageNumber = 2,
+                    chapterTitle = "Chapter I",
+                    blocks = listOf(
+                        ContentBlock("b4", BlockStyle.PARAGRAPH, "FOLIO 2"),
+                        ContentBlock(
+                            "b5",
+                            BlockStyle.PARAGRAPH,
+                            "the autumn of 1894 using hand-dressed limestone blocks from the northern quarry.",
+                        ),
+                        ContentBlock("b6", BlockStyle.PARAGRAPH, "* * *"),
+                        ContentBlock("b7", BlockStyle.PARAGRAPH, "After the dedication ceremony, lanterns lit the river."),
+                    ),
+                ),
+                BookPage(
+                    pageNumber = 3,
+                    chapterTitle = "Plate III",
+                    blocks = listOf(
+                        ContentBlock("b8", BlockStyle.IMAGE, "Scanned plate", imagePath = "__PDF_PAGE_RENDER__:3"),
+                    ),
+                ),
+            ),
+        )
+
+        val result = PdfReflowEngine.buildContinuousFlow(syntheticPdf, normalizeSpaces = true)
+        assertTrue(result.mergedPageBreakCount >= 1, "Should join paragraph split across page 1 -> 2")
+        assertTrue(result.dehyphenatedWordCount >= 1, "Should dehyphenate archi-\\ntectural")
+        assertTrue(result.strippedHeaderFooterCount >= 2, "Should strip running FOLIO headers and page numbers")
+        assertTrue(result.scannedPageNumbers.contains(3), "Should detect page 3 as a scanned/image-only page")
+
+        val combinedText = result.items.joinToString("\n") { it.text }
+        assertTrue(combinedText.contains("architectural span of the viaduct"))
+        assertTrue(combinedText.contains("built in the autumn of 1894"))
+        assertTrue(result.items.any { it.isSceneBreak || PdfReflowEngine.isSemanticSceneBreak(it.text) })
+    }
 }

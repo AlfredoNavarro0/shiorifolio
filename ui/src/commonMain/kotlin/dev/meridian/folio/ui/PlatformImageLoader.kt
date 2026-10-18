@@ -19,8 +19,10 @@ fun rememberLoadedImageBitmap(
         if (path.isNullOrBlank()) {
             null
         } else {
-            val resolvedPath = if (path.startsWith("lazy_pdf://") && !bookFilePath.isNullOrBlank() && !bookId.isNullOrBlank()) {
-                PlatformPdfEngine.renderPdfPageOnDemand(bookFilePath, bookId, pageNumber)
+            val needsOnDemandPdfRender = (path.startsWith("lazy_pdf://") || (path.contains("pdf_page_") && !path.contains("pdf_page_v4_"))) &&
+                !bookFilePath.isNullOrBlank() && !bookId.isNullOrBlank()
+            val resolvedPath = if (needsOnDemandPdfRender) {
+                PlatformPdfEngine.renderPdfPageOnDemand(bookFilePath!!, bookId!!, pageNumber) ?: path
             } else {
                 path
             }

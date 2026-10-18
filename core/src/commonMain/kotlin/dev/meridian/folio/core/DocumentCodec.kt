@@ -25,6 +25,13 @@ expect object PlatformPdfEngine {
         pageNumber: Int,
     ): String?
 
+    fun extractOcrTextForPage(
+        filePath: String?,
+        docId: String,
+        pageNumber: Int,
+        renderedImagePath: String?,
+    ): List<String>
+
     fun exportPdfDocument(book: BookDocument): ByteArray?
 }
 
@@ -229,7 +236,7 @@ object DocumentCodec {
 
         val results = mutableListOf<ContentBlock>()
         val tokenRegex = Regex(
-            """<(h1|h2|h3|p|blockquote|li)\b[^>]*>([\s\S]*?)</\1>|<(img|image)\b([^>]*)/?>""",
+            """<(h1|h2|h3|p|blockquote|li)\b[^>]*>([\s\S]*?)</\1>|<(img|image)\b([^>]*)/?>|<(hr)\b[^>]*/?>""",
             RegexOption.IGNORE_CASE,
         )
 
@@ -238,6 +245,21 @@ object DocumentCodec {
             val innerHtml = match.groupValues[2]
             val imgTag = match.groupValues[3].lowercase()
             val imgAttrs = match.groupValues[4]
+            val hrTag = match.groupValues[5].lowercase()
+
+            if (hrTag.isNotEmpty()) {
+                // Preserve semantic scene break (<hr/>) without duplicating consecutive breaks
+                if (results.lastOrNull()?.text != "* * *") {
+                    results.add(
+                        ContentBlock(
+                            id = "tmp_hr_${results.size}",
+                            style = BlockStyle.PARAGRAPH,
+                            text = "* * *",
+                        ),
+                    )
+                }
+                continue
+            }
 
             if (imgTag.isNotEmpty()) {
                 val src = extractAttr(imgAttrs, "src")
@@ -288,12 +310,26 @@ object DocumentCodec {
 
             val stripped = cleanHtmlEntities(
                 innerHtml
-                    .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+                    .replace(Regex("(<br\\s*/?>\\s*)+", RegexOption.IGNORE_CASE), "\n")
                     .replace(Regex("<[^>]+>"), "")
                     .replace(Regex("[ \\t\\r]+"), " ")
+                    .replace(Regex("\n\\s*\n+"), "\n")
                     .trim(),
             )
             if (stripped.isBlank()) continue
+
+            if (PdfReflowEngine.isSemanticSceneBreak(stripped)) {
+                if (results.lastOrNull()?.text != "* * *") {
+                    results.add(
+                        ContentBlock(
+                            id = "tmp_scene_${results.size}",
+                            style = BlockStyle.PARAGRAPH,
+                            text = "* * *",
+                        ),
+                    )
+                }
+                continue
+            }
 
             val style = when (blockTag) {
                 "h1", "h2", "h3" -> BlockStyle.HEADING

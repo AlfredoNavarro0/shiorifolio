@@ -10,10 +10,20 @@ enum class DocumentFormat(val label: String, val extension: String) {
 
 @Serializable
 enum class PageViewMode(val label: String, val shortTag: String, val stitchLabel: String, val description: String) {
-    ONE_COLUMN("1 Column", "1-Col", "Simple", "Focused single-column manuscript page"),
-    TWO_COLUMNS("2 Columns", "2-Col", "Doble página", "Side-by-side dual-column folio spread"),
+    ONE_COLUMN("Página Individual", "1-Col", "Simple", "Vista enfocada de una sola página"),
+    TWO_COLUMNS("Doble Página", "2-Col", "Doble página", "Pliego abierto de dos páginas lado a lado"),
+    VERTICAL_PAGINATED("Desplazamiento por Páginas", "V-Págs", "Scroll Págs", "Desplazamiento vertical por páginas con separación visual"),
+    VERTICAL_CONTINUOUS("Desplazamiento Continuo", "V-Cont", "Continuo", "Desplazamiento vertical continuo de lectura seguida"),
+    REFLOW_TEXT("Texto Adaptable (Reflujo)", "Reflujo", "Reflujo", "Texto adaptable reconstruido para lectura fluida"),
     STRETCH("Stretch", "Stretch", "Stretch", "Full-viewport proportional page stretch"),
     WIDE("Wide", "Wide", "Ancho", "Wide horizontal reading canvas with generous measure"),
+}
+
+@Serializable
+enum class PageFitMode(val label: String, val shortLabel: String) {
+    FIT_PAGE("Ajustar a la página", "Ajustar Pág."),
+    FIT_WIDTH("Ajustar al ancho", "Ajustar Ancho"),
+    MANUAL_ZOOM("Zoom manual", "Zoom"),
 }
 
 @Serializable
@@ -191,14 +201,186 @@ data class FinishTimePrediction(
 }
 
 @Serializable
+enum class PdfPageColorMode(val label: String, val shortLabel: String) {
+    ORIGINAL("Original (Fiel al PDF)", "Original"),
+    THEME_TINT("Tinte del Tema (Papel / Oscuro)", "Tinte Tema"),
+    SMART_DARK("Noche Invertido (Alto Contraste)", "Invertir"),
+}
+
+@Serializable
+data class KeyBindingSpec(
+    val keyName: String,
+    val ctrl: Boolean = false,
+    val shift: Boolean = false,
+    val alt: Boolean = false,
+) {
+    fun displayLabel(): String {
+        val parts = mutableListOf<String>()
+        if (ctrl) parts.add("Ctrl")
+        if (alt) parts.add("Alt")
+        if (shift) parts.add("Shift")
+        val friendlyKey = when (keyName) {
+            "DirectionLeft" -> "←"
+            "DirectionRight" -> "→"
+            "DirectionUp" -> "↑"
+            "DirectionDown" -> "↓"
+            "PageUp" -> "Page Up"
+            "PageDown" -> "Page Down"
+            else -> keyName
+        }
+        parts.add(friendlyKey)
+        return parts.joinToString(" + ")
+    }
+
+    companion object {
+        fun defaultBindings(): Map<ReaderAction, KeyBindingSpec> =
+            ReaderAction.entries.associateWith { it.defaultSpec }
+    }
+}
+
+@Serializable
+enum class ReaderAction(
+    val label: String,
+    val description: String,
+    val defaultSpec: KeyBindingSpec,
+) {
+    NEXT_PAGE(
+        label = "Página Siguiente",
+        description = "Avanzar folio o doble página (también Flechas → / ↓)",
+        defaultSpec = KeyBindingSpec(keyName = "PageDown"),
+    ),
+    PREV_PAGE(
+        label = "Página Anterior",
+        description = "Retroceder folio o doble página (también Flechas ← / ↑)",
+        defaultSpec = KeyBindingSpec(keyName = "PageUp"),
+    ),
+    NEXT_TAB(
+        label = "Pestaña Siguiente",
+        description = "Cambiar a la siguiente pestaña de la aplicación",
+        defaultSpec = KeyBindingSpec(keyName = "Tab", ctrl = true),
+    ),
+    PREV_TAB(
+        label = "Pestaña Anterior",
+        description = "Cambiar a la pestaña anterior de la aplicación",
+        defaultSpec = KeyBindingSpec(keyName = "Tab", ctrl = true, shift = true),
+    ),
+    NAV_BACK(
+        label = "Volver al Punto Anterior (Historial)",
+        description = "Regresar tras abrir un capítulo, enlace, nota o recordatorio",
+        defaultSpec = KeyBindingSpec(keyName = "DirectionLeft", alt = true),
+    ),
+    NAV_FORWARD(
+        label = "Avanzar en Historial",
+        description = "Rehacer salto después de volver al punto anterior",
+        defaultSpec = KeyBindingSpec(keyName = "DirectionRight", alt = true),
+    ),
+    TOGGLE_ZEN_MODE(
+        label = "Modo Zen (Ocultar Controles)",
+        description = "Ocultar o mostrar las barras y controles centrales",
+        defaultSpec = KeyBindingSpec(keyName = "Z", ctrl = true, shift = true),
+    ),
+    TOGGLE_FULLSCREEN(
+        label = "Pantalla Completa",
+        description = "Alternar pantalla completa de la ventana del sistema",
+        defaultSpec = KeyBindingSpec(keyName = "F11"),
+    ),
+    CYCLE_VIEW_MODE(
+        label = "Cambiar Modo de Vista",
+        description = "Alternar entre Simple, Doble página, Stretch y Ancho",
+        defaultSpec = KeyBindingSpec(keyName = "M", ctrl = true),
+    ),
+    TOGGLE_THEME(
+        label = "Alternar Tema Claro / Oscuro",
+        description = "Cambiar rápidamente entre el tema claro y oscuro",
+        defaultSpec = KeyBindingSpec(keyName = "T", ctrl = true),
+    ),
+}
+
+@Serializable
+data class NavigationHistoryEntry(
+    val bookId: String,
+    val pageNumber: Int,
+    val reason: String,
+    val timestampMs: Long = 0L,
+)
+
+@Serializable
+enum class UiFontFamilyOption(val label: String, val shortLabel: String) {
+    SANS_SERIF("Sans-Serif (Nítida UI)", "Sans"),
+    SERIF("Serif (Editorial Clásica)", "Serif"),
+    MONOSPACE("Monoespaciada (Técnica)", "Mono"),
+}
+
+@Serializable
+enum class UiFontWeightOption(val label: String, val shortLabel: String) {
+    REGULAR("Normal (400)", "Normal"),
+    MEDIUM("Medio (500)", "Medio"),
+    SEMIBOLD("Seminegrita (600)", "Seminegrita"),
+}
+
+@Serializable
+data class UiAppearanceSettings(
+    val fontFamily: UiFontFamilyOption = UiFontFamilyOption.SANS_SERIF,
+    val fontSizeSp: Float = 13f,
+    val fontWeight: UiFontWeightOption = UiFontWeightOption.MEDIUM,
+    val uiScale: Float = 1.0f,
+    val highContrastText: Boolean = false,
+)
+
+@Serializable
+enum class BookFontFamilyOption(val label: String, val shortLabel: String) {
+    SERIF("Serif Literaria", "Serif"),
+    SANS_SERIF("Sans-Serif Limpia", "Sans"),
+    MONOSPACE("Monoespaciada", "Mono"),
+}
+
+@Serializable
+enum class BookTextAlignment(val label: String, val shortLabel: String) {
+    JUSTIFY("Justificado", "Justificado"),
+    START("Alineado a la Izquierda", "Izquierda"),
+    CENTER("Centrado", "Centrado"),
+}
+
+@Serializable
+data class BookTypographySettings(
+    val fontFamily: BookFontFamilyOption = BookFontFamilyOption.SERIF,
+    val paragraphSpacingDp: Float = 14f,
+    val horizontalMarginDp: Float = 32f,
+    val verticalMarginDp: Float = 18f,
+    val textAlignment: BookTextAlignment = BookTextAlignment.JUSTIFY,
+    val pdfPreferReflowText: Boolean = false,
+    val normalizeExcessiveSpaces: Boolean = true,
+)
+
+@Serializable
+data class BookViewPreference(
+    val bookId: String,
+    val viewMode: PageViewMode = PageViewMode.TWO_COLUMNS,
+    val fitMode: PageFitMode = PageFitMode.FIT_PAGE,
+    val zoomScale: Float = 1.0f,
+    val lastPage: Int = 1,
+    val scrollOffsetPx: Int = 0,
+    val pdfPreferReflowText: Boolean = false,
+)
+
+@Serializable
 data class FolioPersistedState(
     val documents: List<BookDocument> = emptyList(),
     val selectedBookId: String? = null,
     val viewMode: PageViewMode = PageViewMode.TWO_COLUMNS,
+    val fitMode: PageFitMode = PageFitMode.FIT_PAGE,
+    val zoomScale: Float = 1.0f,
     val theme: ReaderTheme = ReaderTheme.WHITE,
+    val pdfPageColorMode: PdfPageColorMode = PdfPageColorMode.THEME_TINT,
     val fontSizePt: Float = 17f,
     val lineSpacingMultiplier: Float = 1.8f,
+    val uiAppearance: UiAppearanceSettings = UiAppearanceSettings(),
+    val bookTypography: BookTypographySettings = BookTypographySettings(),
+    val bookPreferences: Map<String, BookViewPreference> = emptyMap(),
     val reminders: Map<String, PageReminder> = emptyMap(),
     val savedPhrases: List<SavedPhrase> = emptyList(),
     val telemetry: Map<String, BookReadingTelemetry> = emptyMap(),
+    val keyBindings: Map<ReaderAction, KeyBindingSpec> = KeyBindingSpec.defaultBindings(),
+    val navigationBackStack: List<NavigationHistoryEntry> = emptyList(),
+    val navigationForwardStack: List<NavigationHistoryEntry> = emptyList(),
 )

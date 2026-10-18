@@ -47,6 +47,26 @@ import dev.meridian.folio.core.HighlightTone
 import dev.meridian.folio.core.ReaderTheme
 import kotlin.math.sin
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import dev.meridian.folio.core.KeyBindingSpec
+
 @Immutable
 data class MeridianPalette(
     val isDark: Boolean,
@@ -60,10 +80,85 @@ data class MeridianPalette(
     val pillBg: Color,
     val accentGreen: Color,
     val warningAmber: Color,
+    val onAccent: Color = if (isDark) Color(0xFF121C15) else Color(0xFFFFFFFF),
+    val onWarningAmber: Color = if (isDark) Color(0xFF1F120A) else Color(0xFFFFFFFF),
+    val disabledInk: Color = if (isDark) Color(0xFF6E675E) else Color(0xFF9C968E),
+    val disabledBg: Color = if (isDark) Color(0xFF2A2623) else Color(0xFFEAE5DC),
+    val focusRing: Color = if (isDark) Color(0xFFA8D5B5) else Color(0xFF2E5A3C),
+    val spineShadow: Color = if (isDark) Color(0xFF0B0908) else Color(0xFF1C1C18),
 ) {
     fun highlightColor(tone: HighlightTone): Color =
         Color(if (isDark) tone.hexDark else tone.hexLight)
+
+    fun toMaterialColorScheme(): ColorScheme =
+        if (isDark) {
+            darkColorScheme(
+                primary = accentGreen,
+                onPrimary = onAccent,
+                primaryContainer = pillBg,
+                onPrimaryContainer = ink,
+                secondary = warningAmber,
+                onSecondary = onWarningAmber,
+                secondaryContainer = elevatedSurface,
+                onSecondaryContainer = ink,
+                tertiary = focusRing,
+                onTertiary = onAccent,
+                background = paper,
+                onBackground = ink,
+                surface = pageSurface,
+                onSurface = ink,
+                surfaceVariant = elevatedSurface,
+                onSurfaceVariant = inkSoft,
+                outline = border,
+                outlineVariant = muted,
+            )
+        } else {
+            lightColorScheme(
+                primary = accentGreen,
+                onPrimary = onAccent,
+                primaryContainer = pillBg,
+                onPrimaryContainer = ink,
+                secondary = warningAmber,
+                onSecondary = onWarningAmber,
+                secondaryContainer = elevatedSurface,
+                onSecondaryContainer = ink,
+                tertiary = focusRing,
+                onTertiary = onAccent,
+                background = paper,
+                onBackground = ink,
+                surface = pageSurface,
+                onSurface = ink,
+                surfaceVariant = elevatedSurface,
+                onSurfaceVariant = inkSoft,
+                outline = border,
+                outlineVariant = muted,
+            )
+        }
 }
+
+@Composable
+fun shioriOutlinedTextFieldColors(palette: MeridianPalette): TextFieldColors =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = palette.ink,
+        unfocusedTextColor = palette.ink,
+        disabledTextColor = palette.disabledInk,
+        cursorColor = palette.accentGreen,
+        focusedContainerColor = palette.pageSurface,
+        unfocusedContainerColor = palette.pageSurface,
+        disabledContainerColor = palette.disabledBg,
+        focusedBorderColor = palette.accentGreen,
+        unfocusedBorderColor = palette.border,
+        disabledBorderColor = palette.border.copy(alpha = 0.5f),
+        focusedLabelColor = palette.accentGreen,
+        unfocusedLabelColor = palette.inkSoft,
+        disabledLabelColor = palette.disabledInk,
+        focusedPlaceholderColor = palette.muted,
+        unfocusedPlaceholderColor = palette.muted,
+        focusedLeadingIconColor = palette.inkSoft,
+        unfocusedLeadingIconColor = palette.muted,
+        focusedTrailingIconColor = palette.inkSoft,
+        unfocusedTrailingIconColor = palette.muted,
+    )
 
 object MeridianDesign {
     // 1. Kindle Cálido / Hueso (#FCF9F3) — Stitch Default Warm Paper
@@ -74,11 +169,13 @@ object MeridianDesign {
         elevatedSurface = Color(0xFFF6F3ED),
         ink = Color(0xFF1C1C18),         // Deep carbon ink (#1c1c18)
         inkSoft = Color(0xFF424842),     // Editorial secondary ink (#424842)
-        muted = Color(0xFF737972),       // Archival caption & outline (#737972)
+        muted = Color(0xFF686E67),       // High-legibility archival caption & outline
         border = Color(0xFFEBDCCB),      // Warm parchment rule (#ebdccb)
         pillBg = Color(0xFFF0EDE7),      // Surface container (#f0ede7)
         accentGreen = Color(0xFF3C4E40), // Sage 700 primary (#3c4e40)
         warningAmber = Color(0xFF984629),// Terracotta / Amber Ribbon (#984629 / #b46b38)
+        onAccent = Color(0xFFFFFFFF),
+        onWarningAmber = Color(0xFFFFFFFF),
     )
 
     // 2. Sepia (#F5EDDB) — Stitch Warm Antiquarian Parchment
@@ -87,13 +184,15 @@ object MeridianDesign {
         paper = Color(0xFFF5EDDB),
         pageSurface = Color(0xFFFAF3E3),
         elevatedSurface = Color(0xFFEBE1CC),
-        ink = Color(0xFF2E241A),
-        inkSoft = Color(0xFF4D3F31),
-        muted = Color(0xFF7A6855),
+        ink = Color(0xFF261D14),
+        inkSoft = Color(0xFF47392B),
+        muted = Color(0xFF6E5C49),
         border = Color(0xFFDECBB3),
         pillBg = Color(0xFFE6DAC2),
-        accentGreen = Color(0xFF506855),
-        warningAmber = Color(0xFFB46B38),
+        accentGreen = Color(0xFF445B49),
+        warningAmber = Color(0xFFA65E2E),
+        onAccent = Color(0xFFFFFFFF),
+        onWarningAmber = Color(0xFFFFFFFF),
     )
 
     // 3. Salvia (#EEF3EE) — Stitch Meridian Botanical Sage
@@ -102,38 +201,91 @@ object MeridianDesign {
         paper = Color(0xFFEEF3EE),
         pageSurface = Color(0xFFF7FAF6),
         elevatedSurface = Color(0xFFE2EAE1),
-        ink = Color(0xFF203227),
-        inkSoft = Color(0xFF3D4A41),
-        muted = Color(0xFF647467),
+        ink = Color(0xFF1B2B21),
+        inkSoft = Color(0xFF36433A),
+        muted = Color(0xFF5A695D),
         border = Color(0xFFC8D6C9),
         pillBg = Color(0xFFDCE5DC),
         accentGreen = Color(0xFF2B3A30),
         warningAmber = Color(0xFF984629),
+        onAccent = Color(0xFFFFFFFF),
+        onWarningAmber = Color(0xFFFFFFFF),
     )
 
-    // 4. Oscuro / Noche Atenuada (#231F1C) — Stitch Nocturnal Reading Surface
+    // 4. Oscuro / Noche Atenuada (#1E1B18) — High-Contrast Nocturnal Reading Surface
     val DarkPalette = MeridianPalette(
         isDark = true,
-        paper = Color(0xFF231F1C),
-        pageSurface = Color(0xFF2B2724),
-        elevatedSurface = Color(0xFF342F2B),
-        ink = Color(0xFFE8E2D9),
-        inkSoft = Color(0xFFC4BCB0),
-        muted = Color(0xFF91897E),
-        border = Color(0xFF433D38),
-        pillBg = Color(0xFF38332F),
-        accentGreen = Color(0xFF89B093),
-        warningAmber = Color(0xFFD98A54),
+        paper = Color(0xFF1E1B18),       // Deep warm obsidian canvas
+        pageSurface = Color(0xFF272320), // Distinct dark folio leaf surface
+        elevatedSurface = Color(0xFF312C28),
+        ink = Color(0xFFF2ECE1),         // Crisp warm ivory ink (high contrast >= 12:1)
+        inkSoft = Color(0xFFD5CDC0),     // Clear secondary ink (contrast >= 8.5:1)
+        muted = Color(0xFFA89F92),       // Accessible muted captions & labels (contrast >= 5.2:1)
+        border = Color(0xFF4A433D),      // Clear warm border rule
+        pillBg = Color(0xFF36302B),      // Elevated pill container
+        accentGreen = Color(0xFF94C2A0), // Luminous botanical sage for dark surfaces
+        warningAmber = Color(0xFFE59866),// Warm readable amber
+        onAccent = Color(0xFF111C14),    // Deep dark ink on luminous sage buttons/badges
+        onWarningAmber = Color(0xFF1F120A),
+        disabledInk = Color(0xFF70695F),
+        disabledBg = Color(0xFF26221F),
+        focusRing = Color(0xFFB5E2C1),
+        spineShadow = Color(0xFF090807), // Deep shadow for 2-column center crease in dark mode
     )
 
-    fun paletteFor(theme: ReaderTheme): MeridianPalette =
-        when (theme) {
+    fun paletteFor(theme: ReaderTheme, highContrast: Boolean = false): MeridianPalette {
+        val base = when (theme) {
             ReaderTheme.WHITE -> WhitePalette
             ReaderTheme.SEPIA -> SepiaPalette
             ReaderTheme.SAGE -> SagePalette
             ReaderTheme.DARK -> DarkPalette
         }
+        if (!highContrast) return base
+        return if (base.isDark) {
+            base.copy(
+                ink = Color(0xFFFFFFFF),
+                inkSoft = Color(0xFFEDE8DF),
+                muted = Color(0xFFC8C0B4),
+                border = Color(0xFF6B6259),
+            )
+        } else {
+            base.copy(
+                ink = Color(0xFF0A0A08),
+                inkSoft = Color(0xFF1F241F),
+                muted = Color(0xFF3E443E),
+                border = Color(0xFFB5A592),
+            )
+        }
+    }
 }
+
+fun dev.meridian.folio.core.UiFontFamilyOption.toComposeFontFamily(): FontFamily =
+    when (this) {
+        dev.meridian.folio.core.UiFontFamilyOption.SANS_SERIF -> FontFamily.SansSerif
+        dev.meridian.folio.core.UiFontFamilyOption.SERIF -> FontFamily.Serif
+        dev.meridian.folio.core.UiFontFamilyOption.MONOSPACE -> FontFamily.Monospace
+    }
+
+fun dev.meridian.folio.core.UiFontWeightOption.toComposeFontWeight(): FontWeight =
+    when (this) {
+        dev.meridian.folio.core.UiFontWeightOption.REGULAR -> FontWeight.Normal
+        dev.meridian.folio.core.UiFontWeightOption.MEDIUM -> FontWeight.Medium
+        dev.meridian.folio.core.UiFontWeightOption.SEMIBOLD -> FontWeight.SemiBold
+    }
+
+fun dev.meridian.folio.core.BookFontFamilyOption.toComposeFontFamily(): FontFamily =
+    when (this) {
+        dev.meridian.folio.core.BookFontFamilyOption.SERIF -> FontFamily.Serif
+        dev.meridian.folio.core.BookFontFamilyOption.SANS_SERIF -> FontFamily.SansSerif
+        dev.meridian.folio.core.BookFontFamilyOption.MONOSPACE -> FontFamily.Monospace
+    }
+
+fun dev.meridian.folio.core.BookTextAlignment.toComposeTextAlign(): androidx.compose.ui.text.style.TextAlign =
+    when (this) {
+        dev.meridian.folio.core.BookTextAlignment.JUSTIFY -> androidx.compose.ui.text.style.TextAlign.Justify
+        dev.meridian.folio.core.BookTextAlignment.START -> androidx.compose.ui.text.style.TextAlign.Start
+        dev.meridian.folio.core.BookTextAlignment.CENTER -> androidx.compose.ui.text.style.TextAlign.Center
+    }
 
 /**
  * ShioriFolio (栞 · Folio) Engraved Book, Bookmark Ribbon & Fountain Nib Logo Mark (viewBox 0 0 64 64):
@@ -558,3 +710,108 @@ fun SwallowtailBookmarkRibbon(
         )
     }
 }
+
+/**
+ * Keyboard-accessible clickable modifier with a visible 2.dp focus ring (`palette.focusRing`)
+ * when traversed via `Tab` / `Shift + Tab` on Windows & Linux.
+ */
+@Composable
+fun Modifier.shioriFocusableClickable(
+    palette: MeridianPalette,
+    shape: Shape = RoundedCornerShape(6.dp),
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+): Modifier {
+    var isFocused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { isFocused = it.isFocused }
+        .then(
+            if (isFocused && enabled) {
+                Modifier.border(2.dp, palette.focusRing, shape)
+            } else {
+                Modifier
+            },
+        )
+        .clickable(enabled = enabled, onClick = onClick)
+}
+
+fun canonicalKeyName(key: Key): String? = when (key) {
+    Key.PageDown -> "PageDown"
+    Key.PageUp -> "PageUp"
+    Key.DirectionLeft -> "DirectionLeft"
+    Key.DirectionRight -> "DirectionRight"
+    Key.DirectionUp -> "DirectionUp"
+    Key.DirectionDown -> "DirectionDown"
+    Key.Tab -> "Tab"
+    Key.Spacebar -> "Space"
+    Key.MoveHome -> "Home"
+    Key.MoveEnd -> "End"
+    Key.F1 -> "F1"
+    Key.F2 -> "F2"
+    Key.F3 -> "F3"
+    Key.F4 -> "F4"
+    Key.F5 -> "F5"
+    Key.F6 -> "F6"
+    Key.F7 -> "F7"
+    Key.F8 -> "F8"
+    Key.F9 -> "F9"
+    Key.F10 -> "F10"
+    Key.F11 -> "F11"
+    Key.F12 -> "F12"
+    Key.A -> "A"
+    Key.B -> "B"
+    Key.C -> "C"
+    Key.D -> "D"
+    Key.E -> "E"
+    Key.F -> "F"
+    Key.G -> "G"
+    Key.H -> "H"
+    Key.I -> "I"
+    Key.J -> "J"
+    Key.K -> "K"
+    Key.L -> "L"
+    Key.M -> "M"
+    Key.N -> "N"
+    Key.O -> "O"
+    Key.P -> "P"
+    Key.Q -> "Q"
+    Key.R -> "R"
+    Key.S -> "S"
+    Key.T -> "T"
+    Key.U -> "U"
+    Key.V -> "V"
+    Key.W -> "W"
+    Key.X -> "X"
+    Key.Y -> "Y"
+    Key.Z -> "Z"
+    Key.Zero -> "0"
+    Key.One -> "1"
+    Key.Two -> "2"
+    Key.Three -> "3"
+    Key.Four -> "4"
+    Key.Five -> "5"
+    Key.Six -> "6"
+    Key.Seven -> "7"
+    Key.Eight -> "8"
+    Key.Nine -> "9"
+    else -> null
+}
+
+fun KeyEvent.matches(spec: KeyBindingSpec): Boolean {
+    val name = canonicalKeyName(key) ?: return false
+    return name.equals(spec.keyName, ignoreCase = true) &&
+        isCtrlPressed == spec.ctrl &&
+        isShiftPressed == spec.shift &&
+        isAltPressed == spec.alt
+}
+
+fun KeyEvent.toKeyBindingSpecOrNull(): KeyBindingSpec? {
+    val name = canonicalKeyName(key) ?: return null
+    return KeyBindingSpec(
+        keyName = name,
+        ctrl = isCtrlPressed,
+        shift = isShiftPressed,
+        alt = isAltPressed,
+    )
+}
+
