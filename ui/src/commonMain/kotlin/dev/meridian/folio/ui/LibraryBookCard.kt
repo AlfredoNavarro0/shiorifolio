@@ -43,6 +43,7 @@ internal fun LibraryBookCard(
     onOpen: () -> Unit,
     onExport: () -> Unit,
     onReload: () -> Unit,
+    onEditMetadata: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val hovered by interactions.collectIsHoveredAsState()
@@ -105,6 +106,7 @@ internal fun LibraryBookCard(
                     DropdownMenuItem(text = { Text(if (selected) "Quitar de la selección" else "Seleccionar libro") },
                         onClick = { menuExpanded = false; onToggleSelection() }, modifier = Modifier.testTag("library_menu_select_${book.id}"))
                     DropdownMenuItem(text = { Text("Exportar") }, onClick = { menuExpanded = false; onExport() }, modifier = Modifier.testTag("library_export_${book.id}"))
+                    DropdownMenuItem(text = { Text("Editar metadatos") }, onClick = { menuExpanded = false; onEditMetadata() }, modifier = Modifier.testTag("library_edit_metadata_${book.id}"))
                     if (book.filePath != null) DropdownMenuItem(text = { Text("Recargar desde el archivo") },
                         enabled = !book.isMissingOnDisk, onClick = { menuExpanded = false; onReload() }, modifier = Modifier.testTag("library_reload_${book.id}"))
                     if (reminder != null) {

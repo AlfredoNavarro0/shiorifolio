@@ -42,6 +42,9 @@ internal fun SettingsAndShortcutsWorkspaceView(
     onResetUiAppearance: () -> Unit,
     onResetBookTypography: () -> Unit,
     onResetAllAppearance: () -> Unit,
+    onExportBackup: (() -> Unit)? = null,
+    onImportBackup: (() -> Unit)? = null,
+    dataStatusMessage: String? = null,
 ) {
     var category by remember { mutableStateOf("appearance") }
     val originalPdf = currentBook.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
@@ -171,13 +174,58 @@ internal fun SettingsAndShortcutsWorkspaceView(
                 }
                 TextButton(onResetKeyBindings, modifier = Modifier.testTag("reset_shortcuts_btn")) { Text("Restablecer atajos") }
             }
+            "data" -> {
+                SettingsGroup(
+                    "Respaldo portátil",
+                    "Exporta tu progreso, anotaciones, colecciones, recordatorios y preferencias a un archivo .json que puedes llevar a otro dispositivo.",
+                    palette,
+                    "settings_data_backup_card",
+                ) {
+                    SettingsRow("Copia de seguridad", palette) {
+                        if (onExportBackup != null) {
+                            ModernChromeAction("Exportar respaldo", palette, "backup_export_btn") { onExportBackup() }
+                        }
+                        if (onImportBackup != null) {
+                            ModernChromeAction("Importar respaldo", palette, "backup_import_btn") { onImportBackup() }
+                        }
+                    }
+                    Text(
+                        "Los libros se reasocian por huella de contenido al importar: el progreso vuelve a su sitio aunque el archivo esté en otra carpeta. " +
+                            "Los libros ausentes se informan al terminar y nunca se elimina nada de lo que ya tienes.",
+                        color = palette.inkSoft,
+                        fontSize = 12.sp,
+                    )
+                    if (dataStatusMessage != null) {
+                        Surface(
+                            color = palette.pillBg,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("data_status_message"),
+                        ) {
+                            Text(dataStatusMessage, color = palette.ink, fontSize = 12.5.sp, modifier = Modifier.padding(12.dp))
+                        }
+                    }
+                }
+                SettingsGroup(
+                    "Validación de EPUB",
+                    "Cada exportación regenera contenido, índice y referencias internas, y se valida antes de entregarla.",
+                    palette,
+                    "settings_data_validation_card",
+                ) {
+                    Text(
+                        "ShioriFolio valida por sí mismo la estructura del EPUB generado (manifiesto, índice y referencias). " +
+                            "Si tienes epubcheck instalado, además se ejecuta esa comprobación externa sin bloquear nada si no está disponible.",
+                        color = palette.inkSoft,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun SettingsShell(palette: MeridianPalette, selected: String, onSelect: (String) -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    val categories = listOf("appearance" to "Apariencia", "reading" to "Lectura", "shortcuts" to "Atajos")
+    val categories = listOf("appearance" to "Apariencia", "reading" to "Lectura", "shortcuts" to "Atajos", "data" to "Datos")
     Column(Modifier.fillMaxSize().background(palette.paper).padding(24.dp).testTag("settings_workspace_view"), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Column {
             Text("Ajustes", color = palette.ink, fontSize = 30.sp, fontWeight = FontWeight.Bold)

@@ -70,7 +70,7 @@ actual object PlatformPdfEngine {
             filePath = filePath,
             pages = pages,
             currentPage = 1,
-            parserVersion = 4,
+            parserVersion = DocumentCodec.CURRENT_PARSER_VERSION,
             createdAtMs = nowMs,
             updatedAtMs = nowMs,
         )

@@ -37,6 +37,13 @@ expect object PlatformPdfEngine {
 
 object DocumentCodec {
 
+    /**
+     * Current parser version for imported books. Bump it whenever parser output
+     * changes (new extracted fields, corrected block structure, ...) so books
+     * already persisted get re-parsed once on next launch.
+     */
+    const val CURRENT_PARSER_VERSION = 5
+
     fun importFromBytes(
         fileName: String,
         bytes: ByteArray,
@@ -86,6 +93,7 @@ object DocumentCodec {
         val parsedAuthor = extractXmlTag(opfXml, "dc:creator")
             ?: extractXmlTag(opfXml, "creator")
             ?: "Meridian Archive Author"
+        val parsedLanguage = extractXmlTag(opfXml, "dc:language") ?: ""
 
         // 2. Cache all image assets inside the EPUB so cover art and chapter illustrations render natively
         val cachedImageMap = LinkedHashMap<String, String>()
@@ -220,9 +228,10 @@ object DocumentCodec {
             filePath = filePath,
             pages = pages,
             currentPage = 1,
-            parserVersion = 3,
+            parserVersion = CURRENT_PARSER_VERSION,
             createdAtMs = nowMs,
             updatedAtMs = nowMs,
+            language = parsedLanguage,
         )
     }
 
@@ -371,8 +380,10 @@ object DocumentCodec {
             h1, h2 { color: #2b3a30; font-weight: 600; }
             blockquote { border-left: 3px solid #2b3a30; padding-left: 1em; color: #3d4a41; font-style: italic; }
             .callout { background: #dfe4da; padding: 0.8em 1em; border-radius: 4px; }
+            nav ol { list-style: none; padding-left: 0; }
         """.trimIndent().encodeToByteArray()
 
+        val language = book.language.trim().ifBlank { "en" }
         val manifestItems = StringBuilder()
         val spineItems = StringBuilder()
 
@@ -401,7 +412,7 @@ object DocumentCodec {
             val xhtml = """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <!DOCTYPE html>
-                <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+                <html xmlns="http://www.w3.org/1999/xhtml" lang="$language" xml:lang="$language">
                 <head>
                   <meta charset="UTF-8"/>
                   <title>${escapeXml(page.chapterTitle)}</title>
@@ -415,6 +426,49 @@ object DocumentCodec {
             entries["OEBPS/$fileName"] = xhtml.encodeToByteArray()
         }
 
+        val toc = book.tableOfContents
+        val navItems = toc.joinToString("\n") { entry ->
+            """      <li><a href="page_${entry.startPage}.xhtml">${escapeXml(entry.title)}</a></li>"""
+        }
+        entries["OEBPS/nav.xhtml"] = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE html>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="$language" xml:lang="$language">
+            <head>
+              <meta charset="UTF-8"/>
+              <title>${escapeXml(book.title)} - Indice</title>
+              <link rel="stylesheet" type="text/css" href="style.css"/>
+            </head>
+            <body>
+              <nav epub:type="toc" id="toc">
+                <h1>Indice</h1>
+                <ol>
+            $navItems
+                </ol>
+              </nav>
+            </body>
+            </html>
+        """.trimIndent().encodeToByteArray()
+
+        val navPoints = toc.mapIndexed { index, entry ->
+            """    <navPoint id="navPoint_${entry.startPage}" playOrder="${index + 1}"><navLabel><text>${escapeXml(entry.title)}</text></navLabel><content src="page_${entry.startPage}.xhtml"/></navPoint>"""
+        }.joinToString("\n")
+        entries["OEBPS/toc.ncx"] = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+              <head>
+                <meta name="dtb:uid" content="${escapeXml(book.id)}"/>
+                <meta name="dtb:depth" content="1"/>
+              </head>
+              <docTitle><text>${escapeXml(book.title)}</text></docTitle>
+              <navMap>
+            $navPoints
+              </navMap>
+            </ncx>
+        """.trimIndent().encodeToByteArray()
+
+        val coverItem = coverManifestEntry(book, entries)
+        val modified = isoUtcTimestamp(book.updatedAtMs.takeIf { it > 0 } ?: PlatformFileAndZipIo.currentEpochMillis())
         val opf = """
             <?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">
@@ -422,18 +476,41 @@ object DocumentCodec {
                 <dc:identifier id="BookId">${escapeXml(book.id)}</dc:identifier>
                 <dc:title>${escapeXml(book.title)}</dc:title>
                 <dc:creator>${escapeXml(book.author)}</dc:creator>
-                <dc:language>en</dc:language>
+                <dc:language>$language</dc:language>
+                <meta property="dcterms:modified">$modified</meta>
               </metadata>
               <manifest>
                 <item id="css" href="style.css" media-type="text/css"/>
-            $manifestItems  </manifest>
-              <spine>
+                <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+                <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+            $coverItem$manifestItems  </manifest>
+              <spine toc="ncx">
             $spineItems  </spine>
             </package>
         """.trimIndent()
         entries["OEBPS/content.opf"] = opf.encodeToByteArray()
 
         return PlatformFileAndZipIo.zipEntries(entries, uncompressedFirstEntry = "mimetype")
+    }
+
+    private fun coverManifestEntry(book: BookDocument, entries: MutableMap<String, ByteArray>): String {
+        val coverPath = book.coverImagePath ?: return ""
+        val bytes = PlatformFileAndZipIo.readFileBytes(coverPath) ?: return ""
+        val ext = coverPath.substringAfterLast('.', "").lowercase()
+        val mediaType = when (ext) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> return ""
+        }
+        entries["OEBPS/images/cover.$ext"] = bytes
+        return """    <item id="cover-image" href="images/cover.$ext" media-type="$mediaType" properties="cover-image"/>""" + "\n"
+    }
+
+    private fun isoUtcTimestamp(epochMs: Long): String {
+        val iso = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMs).toString()
+        return if ('.' in iso) iso.substringBefore('.') + "Z" else iso
     }
 
     fun parsePdfBytes(
@@ -511,7 +588,7 @@ object DocumentCodec {
             filePath = filePath,
             pages = pages,
             currentPage = 1,
-            parserVersion = 3,
+            parserVersion = CURRENT_PARSER_VERSION,
             createdAtMs = nowMs,
             updatedAtMs = nowMs,
         )

@@ -100,7 +100,7 @@ class LibraryManager internal constructor(private val repository: FolioRepositor
             val prefix = "${fingerprint.take(16)}_"
             val imported = DocumentCodec.importFromBytes(prefix + name, bytes, importPath)
             imported.copy(
-                id = "import_$fingerprint", title = imported.title.removePrefix(prefix), parserVersion = 4,
+                id = "import_$fingerprint", title = imported.title.removePrefix(prefix), parserVersion = DocumentCodec.CURRENT_PARSER_VERSION,
                 pages = imported.pages.map { page -> page.copy(
                     chapterTitle = page.chapterTitle.removePrefix(prefix),
                     blocks = page.blocks.map { block ->
@@ -122,7 +122,7 @@ class LibraryManager internal constructor(private val repository: FolioRepositor
                 isMissingOnDisk = false,
                 pages = if (refresh) parsed.pages else current.pages,
                 currentPage = if (refresh) current.currentPage.coerceIn(1, parsed.totalPages) else current.currentPage,
-                parserVersion = if (refresh) 4 else current.parserVersion,
+                parserVersion = if (refresh) DocumentCodec.CURRENT_PARSER_VERSION else current.parserVersion,
             )
             state.copy(
                 documents = if (state.documents.any { it.id == current.id }) state.documents.map { if (it.id == current.id) result else it }
@@ -131,6 +131,7 @@ class LibraryManager internal constructor(private val repository: FolioRepositor
                 excludedLibraryPaths = state.excludedLibraryPaths - canonical,
             )
         }
+        if (refresh) repository.clearEditHistoryFor(setOf(result.id))
         return result
     }
 
@@ -241,6 +242,7 @@ class LibraryManager internal constructor(private val repository: FolioRepositor
                     excludedLibraryPaths = state.excludedLibraryPaths + removedPaths,
                 )
             }
+            repository.clearEditHistoryFor(removable)
             failed
         }
     }

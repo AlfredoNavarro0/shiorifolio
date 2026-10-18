@@ -106,6 +106,8 @@ data class BookDocument(
     val contentSha256: String? = null,
     val sources: List<LibrarySource> = emptyList(),
     val isMissingOnDisk: Boolean = false,
+    val language: String = "",
+    val coverImagePath: String? = null,
 ) {
     val totalPages: Int
         get() = pages.size.coerceAtLeast(1)
@@ -139,6 +141,12 @@ data class PageReminder(
 )
 
 @Serializable
+enum class AnchorStatus(val label: String) {
+    ACTIVE("Anclada"),
+    ORPHANED("Huérfana"),
+}
+
+@Serializable
 data class SavedPhrase(
     val id: String,
     val bookId: String,
@@ -149,6 +157,10 @@ data class SavedPhrase(
     val note: String = "",
     val tone: HighlightTone = HighlightTone.SAGE,
     val createdAtMs: Long,
+    val anchorPrefix: String = "",
+    val anchorSuffix: String = "",
+    val anchorChapterTitle: String = "",
+    val anchorStatus: AnchorStatus = AnchorStatus.ACTIVE,
 )
 
 @Serializable
@@ -299,6 +311,21 @@ enum class ReaderAction(
         label = "Alternar Tema Claro / Oscuro",
         description = "Cambiar rápidamente entre el tema claro y oscuro",
         defaultSpec = KeyBindingSpec(keyName = "T", ctrl = true),
+    ),
+    UNDO_EDIT(
+        label = "Deshacer Edición",
+        description = "Revertir el último cambio de contenido de esta sesión de edición",
+        defaultSpec = KeyBindingSpec(keyName = "Z", ctrl = true),
+    ),
+    REDO_EDIT(
+        label = "Rehacer Edición",
+        description = "Reaplicar el último cambio de contenido deshecho",
+        defaultSpec = KeyBindingSpec(keyName = "Y", ctrl = true),
+    ),
+    FIND_IN_BOOK(
+        label = "Buscar en el Libro",
+        description = "Abrir buscar y reemplazar sobre el libro abierto",
+        defaultSpec = KeyBindingSpec(keyName = "F", ctrl = true),
     ),
 }
 

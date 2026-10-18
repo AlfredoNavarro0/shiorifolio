@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +78,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -88,6 +92,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.meridian.folio.core.AnchorStatus
+import dev.meridian.folio.core.BackupPeek
 import dev.meridian.folio.core.BlockStyle
 import dev.meridian.folio.core.BookDocument
 import dev.meridian.folio.core.BookFontFamilyOption
@@ -156,8 +162,12 @@ fun MeridianFolioApp(
     isWindowFullscreen: Boolean = false,
     onToggleWindowFullscreen: (() -> Unit)? = null,
     onPickFolder: (((String) -> Unit) -> Unit)? = null,
+    onPickBackupFileToImport: ((onPathSelected: (String) -> Unit) -> Unit)? = null,
+    onPickBackupFileToExport: ((defaultFileName: String, onPathSelected: (String) -> Unit) -> Unit)? = null,
+    onPickImageFile: ((onPathSelected: (String) -> Unit) -> Unit)? = null,
 ) {
     val state by repository.state.collectAsState()
+    val editHistoryState by repository.editHistoryState.collectAsState()
     val importScope = rememberCoroutineScope()
     LibraryFolderEffects(repository)
     val uiAppearance = state.uiAppearance
@@ -174,6 +184,15 @@ fun MeridianFolioApp(
     var quickMarkTone by remember { mutableStateOf(HighlightTone.SAGE) }
     var showQuickMarkBar by remember { mutableStateOf(false) }
     var statusBannerMessage by remember { mutableStateOf<String?>(null) }
+    var showSearchReplaceDialog by remember { mutableStateOf(false) }
+    var showPageEditorDialog by remember { mutableStateOf(false) }
+    var showChapterManagerDialog by remember { mutableStateOf(false) }
+    var showMetadataDialog by remember { mutableStateOf(false) }
+    var reattachPhraseId by remember { mutableStateOf<String?>(null) }
+    var backupStatusMessage by remember { mutableStateOf<String?>(null) }
+    var pendingBackupImport by remember { mutableStateOf<Pair<String, BackupPeek>?>(null) }
+    var showBackupExportPathDialog by remember { mutableStateOf(false) }
+    var showBackupImportPathDialog by remember { mutableStateOf(false) }
 
     // User can also manually preview the Mobile Kindle View vs Desktop Spread View on any screen size
     var forceMobileKindleLayout by remember { mutableStateOf<Boolean?>(null) }
@@ -277,6 +296,50 @@ fun MeridianFolioApp(
                 }
             }
 
+            val openBackupPeek: (String) -> Unit = { path ->
+                importScope.launch {
+                    val peek = withContext(dev.meridian.folio.core.PlatformLibraryIo.ioDispatcher) {
+                        repository.peekBackupFile(path)
+                    }
+                    if (peek == null) {
+                        backupStatusMessage = "El archivo elegido no es un respaldo válido de ShioriFolio."
+                    } else {
+                        pendingBackupImport = path to peek
+                    }
+                }
+            }
+
+            val exportBackupToPath: (String) -> Unit = { path ->
+                importScope.launch {
+                    val summary = withContext(dev.meridian.folio.core.PlatformLibraryIo.ioDispatcher) {
+                        repository.exportBackupToFile(path)
+                    }
+                    backupStatusMessage = if (summary != null) {
+                        "Respaldo exportado: ${summary.booksIncluded} libro(s), ${summary.phrasesIncluded} anotación(es), ${summary.remindersIncluded} recordatorio(s)."
+                    } else {
+                        "No se pudo escribir el respaldo en $path."
+                    }
+                }
+            }
+
+            val handleExportBackup: () -> Unit = {
+                val picker = onPickBackupFileToExport
+                if (picker != null) {
+                    picker("shiorifolio-backup.json") { path -> exportBackupToPath(path) }
+                } else {
+                    showBackupExportPathDialog = true
+                }
+            }
+
+            val handleImportBackup: () -> Unit = {
+                val picker = onPickBackupFileToImport
+                if (picker != null) {
+                    picker { path -> openBackupPeek(path) }
+                } else {
+                    showBackupImportPathDialog = true
+                }
+            }
+
             val bindingFor: (ReaderAction) -> KeyBindingSpec = { action ->
                 state.keyBindings[action] ?: action.defaultSpec
             }
@@ -285,8 +348,12 @@ fun MeridianFolioApp(
             // Restore it when navigation or dismissing controls removes the previously focused node.
             // Do not key this effect on page/timer updates: typing and keyboard traversal keep focus.
             LaunchedEffect(currentBook.id, activeSection, isZenControlsHidden, forceMobileKindleLayout,
-                showReminderEditor, showQuickMarkBar) {
-                if (!showReminderEditor && !showQuickMarkBar) {
+                showReminderEditor, showQuickMarkBar, showSearchReplaceDialog, showPageEditorDialog,
+                showChapterManagerDialog, showMetadataDialog, reattachPhraseId, pendingBackupImport,
+                showBackupExportPathDialog, showBackupImportPathDialog) {
+                if (!showReminderEditor && !showQuickMarkBar && !showSearchReplaceDialog && !showPageEditorDialog &&
+                    !showChapterManagerDialog && !showMetadataDialog && reattachPhraseId == null &&
+                    pendingBackupImport == null && !showBackupExportPathDialog && !showBackupImportPathDialog) {
                     // Lazy content can dispose its focused search field after this effect starts.
                     // Wait for its guard to unregister instead of skipping focus restoration forever.
                     snapshotFlow { focusedTextFieldCount }.first { it == 0 }
@@ -321,6 +388,38 @@ fun MeridianFolioApp(
                         // 2. Escape closes modal editors or exits Zen mode
                         if (event.key == Key.Escape) {
                             return@onPreviewKeyEvent when {
+                                showSearchReplaceDialog -> {
+                                    showSearchReplaceDialog = false
+                                    true
+                                }
+                                showPageEditorDialog -> {
+                                    showPageEditorDialog = false
+                                    true
+                                }
+                                showChapterManagerDialog -> {
+                                    showChapterManagerDialog = false
+                                    true
+                                }
+                                showMetadataDialog -> {
+                                    showMetadataDialog = false
+                                    true
+                                }
+                                reattachPhraseId != null -> {
+                                    reattachPhraseId = null
+                                    true
+                                }
+                                pendingBackupImport != null -> {
+                                    pendingBackupImport = null
+                                    true
+                                }
+                                showBackupExportPathDialog -> {
+                                    showBackupExportPathDialog = false
+                                    true
+                                }
+                                showBackupImportPathDialog -> {
+                                    showBackupImportPathDialog = false
+                                    true
+                                }
                                 showReminderEditor -> {
                                     showReminderEditor = false
                                     true
@@ -374,6 +473,22 @@ fun MeridianFolioApp(
                             repository.toggleTheme()
                             return@onPreviewKeyEvent true
                         }
+                        if (event.matches(bindingFor(ReaderAction.FIND_IN_BOOK))) {
+                            showSearchReplaceDialog = true
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.matches(bindingFor(ReaderAction.UNDO_EDIT))) {
+                            if (repository.undoEdit(currentBook.id)) {
+                                statusBannerMessage = "Cambio deshecho."
+                            }
+                            return@onPreviewKeyEvent true
+                        }
+                        if (event.matches(bindingFor(ReaderAction.REDO_EDIT))) {
+                            if (repository.redoEdit(currentBook.id)) {
+                                statusBannerMessage = "Cambio rehecho."
+                            }
+                            return@onPreviewKeyEvent true
+                        }
 
                         // 6. Navigation History (Back / Forward) — distinct from sequential page turns
                         if (event.matches(bindingFor(ReaderAction.NAV_BACK))) {
@@ -411,6 +526,106 @@ fun MeridianFolioApp(
                     .testTag("meridian_root"),
             ) {
                 val isMobileKindleView = forceMobileKindleLayout ?: (maxWidth < 700.dp)
+
+                // Non-destructive editing overlays. Dialogs render above every layout branch.
+                if (showSearchReplaceDialog) {
+                    SearchReplaceDialog(
+                        repository = repository,
+                        palette = palette,
+                        book = currentBook,
+                        onClose = { showSearchReplaceDialog = false },
+                        onStatus = { statusBannerMessage = it },
+                    )
+                }
+                if (showPageEditorDialog) {
+                    PageEditorDialog(
+                        repository = repository,
+                        palette = palette,
+                        book = currentBook,
+                        onClose = { showPageEditorDialog = false },
+                        onStatus = { statusBannerMessage = it },
+                    )
+                }
+                if (showChapterManagerDialog) {
+                    ChapterManagerDialog(
+                        repository = repository,
+                        palette = palette,
+                        book = currentBook,
+                        onClose = { showChapterManagerDialog = false },
+                        onStatus = { statusBannerMessage = it },
+                    )
+                }
+                if (showMetadataDialog) {
+                    BookMetadataDialog(
+                        palette = palette,
+                        book = currentBook,
+                        coverPicker = onPickImageFile,
+                        onSave = { title, author, language, coverImagePath ->
+                            repository.updateDocumentMetadata(currentBook.id, title, author, language, coverImagePath)
+                            statusBannerMessage = "Metadatos de \"$title\" actualizados."
+                        },
+                        onClose = { showMetadataDialog = false },
+                    )
+                }
+                val activeReattachPhraseId = reattachPhraseId
+                if (activeReattachPhraseId != null) {
+                    ReattachAnnotationDialog(
+                        repository = repository,
+                        palette = palette,
+                        phraseId = activeReattachPhraseId,
+                        onClose = { reattachPhraseId = null },
+                        onStatus = { statusBannerMessage = it },
+                    )
+                }
+                val activeBackupImport = pendingBackupImport
+                if (activeBackupImport != null) {
+                    BackupImportConfirmDialog(
+                        palette = palette,
+                        peek = activeBackupImport.second,
+                        onConfirm = {
+                            val path = activeBackupImport.first
+                            pendingBackupImport = null
+                            importScope.launch {
+                                val summary = withContext(dev.meridian.folio.core.PlatformLibraryIo.ioDispatcher) {
+                                    repository.importBackupFromFile(path)
+                                }
+                                backupStatusMessage = if (summary != null) {
+                                    "Respaldo restaurado: ${summary.booksMatched} libro(s) reasociados, ${summary.phrasesRestored} anotación(es) restauradas." +
+                                        if (summary.missingBookTitles.isNotEmpty()) {
+                                            " Libros ausentes: ${summary.missingBookTitles.joinToString(", ")}. Importa esos archivos para completar su progreso."
+                                        } else {
+                                            ""
+                                        }
+                                } else {
+                                    "No se pudo aplicar el respaldo elegido."
+                                }
+                            }
+                        },
+                        onClose = { pendingBackupImport = null },
+                    )
+                }
+                if (showBackupExportPathDialog) {
+                    BackupPathDialog(
+                        title = "Exportar respaldo",
+                        palette = palette,
+                        onConfirm = { path ->
+                            showBackupExportPathDialog = false
+                            exportBackupToPath(path)
+                        },
+                        onClose = { showBackupExportPathDialog = false },
+                    )
+                }
+                if (showBackupImportPathDialog) {
+                    BackupPathDialog(
+                        title = "Importar respaldo",
+                        palette = palette,
+                        onConfirm = { path ->
+                            showBackupImportPathDialog = false
+                            openBackupPeek(path)
+                        },
+                        onClose = { showBackupImportPathDialog = false },
+                    )
+                }
 
                 if (isMobileKindleView && activeSection == MeridianSection.READER) {
                     // =========================================================================
@@ -462,6 +677,17 @@ fun MeridianFolioApp(
                         },
                         onToggleTimer = { isTimerRunning = !isTimerRunning },
                         onToggleZenControls = { isZenControlsHidden = !isZenControlsHidden },
+                        onOpenSearch = { showSearchReplaceDialog = true },
+                        onOpenPageEditor = { showPageEditorDialog = true },
+                        onOpenChapterManager = { showChapterManagerDialog = true },
+                        canUndoEdit = currentBook.id in editHistoryState.undoBooks,
+                        canRedoEdit = currentBook.id in editHistoryState.redoBooks,
+                        onUndoEdit = {
+                            if (repository.undoEdit(currentBook.id)) statusBannerMessage = "Cambio deshecho."
+                        },
+                        onRedoEdit = {
+                            if (repository.redoEdit(currentBook.id)) statusBannerMessage = "Cambio rehecho."
+                        },
                         onToggleFullscreen = handleToggleWindowFullscreen,
                         onToggleBookmarkHere = {
                             val existing = state.reminders[currentBook.id]
@@ -536,6 +762,18 @@ fun MeridianFolioApp(
                                 onToggleZenControls = { isZenControlsHidden = !isZenControlsHidden },
                                 onToggleFullscreen = handleToggleWindowFullscreen,
                                 onOpenFileDialog = onOpenFileDialog,
+                                onOpenSearch = { showSearchReplaceDialog = true },
+                                onOpenPageEditor = { showPageEditorDialog = true },
+                                onOpenChapterManager = { showChapterManagerDialog = true },
+                                onOpenMetadataEditor = { showMetadataDialog = true },
+                                canUndoEdit = currentBook.id in editHistoryState.undoBooks,
+                                canRedoEdit = currentBook.id in editHistoryState.redoBooks,
+                                onUndoEdit = {
+                                    if (repository.undoEdit(currentBook.id)) statusBannerMessage = "Cambio deshecho."
+                                },
+                                onRedoEdit = {
+                                    if (repository.redoEdit(currentBook.id)) statusBannerMessage = "Cambio rehecho."
+                                },
                             )
                         }
 
@@ -726,6 +964,7 @@ fun MeridianFolioApp(
                                         activeSection = MeridianSection.READER
                                     },
                                     onDeletePhrase = { repository.deleteSavedPhrase(it) },
+                                    onReattachPhrase = { reattachPhraseId = it },
                                 )
 
                                 MeridianSection.LIBRARY -> LibraryWorkspace(
@@ -777,6 +1016,9 @@ fun MeridianFolioApp(
                                         repository.resetAllAppearanceAndTypography()
                                         statusBannerMessage = "Todos los ajustes de apariencia y tipografía han sido restaurados."
                                     },
+                                    onExportBackup = handleExportBackup,
+                                    onImportBackup = handleImportBackup,
+                                    dataStatusMessage = backupStatusMessage,
                                 )
                             }
                         }
@@ -823,6 +1065,14 @@ private fun StitchDesktopTopNavigationBar(
     onToggleZenControls: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onOpenFileDialog: (() -> Unit)?,
+    onOpenSearch: () -> Unit,
+    onOpenPageEditor: () -> Unit,
+    onOpenChapterManager: () -> Unit,
+    onOpenMetadataEditor: () -> Unit,
+    canUndoEdit: Boolean,
+    canRedoEdit: Boolean,
+    onUndoEdit: () -> Unit,
+    onRedoEdit: () -> Unit,
 ) {
     var showTypographyPopover by remember { mutableStateOf(false) }
     val uiFontFamily = uiAppearance.fontFamily.toComposeFontFamily()
@@ -842,6 +1092,12 @@ private fun StitchDesktopTopNavigationBar(
                 }
                 ModernChromeAction("Marcapáginas", palette, "open_reminder_btn", activeReminder != null, onClick = onToggleReminderEditor)
                 ModernChromeAction("+ Frase", palette, "open_mark_phrase_btn", onClick = onToggleQuickMark)
+                ModernChromeAction("Buscar", palette, "reader_search_btn", description = "Buscar y reemplazar en el libro", onClick = onOpenSearch)
+                ModernChromeAction("Editar página", palette, "open_page_editor_btn", description = "Corregir palabras y párrafos de la página actual", onClick = onOpenPageEditor)
+                ModernChromeAction("Capítulos", palette, "open_chapter_manager_btn", description = "Renombrar, reordenar y reparar capítulos", onClick = onOpenChapterManager)
+                ModernChromeAction("Metadatos", palette, "open_metadata_btn", description = "Editar título, autor, idioma y portada", onClick = onOpenMetadataEditor)
+                ModernChromeAction("Deshacer", palette, "reader_undo_btn", enabled = canUndoEdit, description = "Deshacer el último cambio", onClick = onUndoEdit)
+                ModernChromeAction("Rehacer", palette, "reader_redo_btn", enabled = canRedoEdit, description = "Rehacer el último cambio deshecho", onClick = onRedoEdit)
                 ModernChromeAction("Enfoque", palette, "zen_mode_toggle_btn", onClick = onToggleZenControls)
                 ModernChromeAction("⛶  Pantalla completa", palette, "fullscreen_toggle_btn", isFullscreen, onClick = onToggleFullscreen)
                 ModernChromeAction("Vista móvil", palette, "mobile_preview_toggle", isMobileOverride, onClick = onToggleMobilePreview)
@@ -2347,6 +2603,13 @@ private fun StitchMobileKindleReaderLayout(
     onRunOcrOnPage: (Int) -> Unit,
     onToggleTimer: () -> Unit,
     onToggleZenControls: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenPageEditor: () -> Unit,
+    onOpenChapterManager: () -> Unit,
+    canUndoEdit: Boolean,
+    canRedoEdit: Boolean,
+    onUndoEdit: () -> Unit,
+    onRedoEdit: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onToggleBookmarkHere: () -> Unit,
     onQuickSavePhrase: (phrase: String, context: String) -> Unit,
@@ -2380,6 +2643,7 @@ private fun StitchMobileKindleReaderLayout(
     val hudVisible = !isZenControlsHidden
     var showKindleSettingsSheet by remember { mutableStateOf(false) }
     var showMobileTocSheet by remember { mutableStateOf(false) }
+    var showMobileEditMenu by remember { mutableStateOf(false) }
     val contentFontFamily = bookTypography.fontFamily.toComposeFontFamily()
     val contentTextAlign = bookTypography.textAlignment.toComposeTextAlign()
     val effectiveFontSizePt = if (fitMode == PageFitMode.MANUAL_ZOOM) {
@@ -2747,6 +3011,55 @@ private fun StitchMobileKindleReaderLayout(
                                         .testTag("zen_mode_toggle_btn"),
                                 ) {
                                     Text("🧘", color = palette.ink, fontSize = 11.5.sp)
+                                }
+
+                                Box {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (showMobileEditMenu) palette.accentGreen else palette.pillBg)
+                                            .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                            .clickable { showMobileEditMenu = true }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                                            .testTag("mobile_edit_menu_btn")
+                                            .semantics { contentDescription = "Herramientas de edición del libro" },
+                                    ) {
+                                        Text(
+                                            text = "✎",
+                                            color = if (showMobileEditMenu) palette.onAccent else palette.ink,
+                                            fontSize = 11.5.sp,
+                                        )
+                                    }
+                                    DropdownMenu(expanded = showMobileEditMenu, onDismissRequest = { showMobileEditMenu = false }) {
+                                        DropdownMenuItem(
+                                            text = { Text("Buscar y reemplazar") },
+                                            onClick = { showMobileEditMenu = false; onOpenSearch() },
+                                            modifier = Modifier.testTag("mobile_search_btn"),
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Editar página") },
+                                            onClick = { showMobileEditMenu = false; onOpenPageEditor() },
+                                            modifier = Modifier.testTag("mobile_page_editor_btn"),
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Gestionar capítulos") },
+                                            onClick = { showMobileEditMenu = false; onOpenChapterManager() },
+                                            modifier = Modifier.testTag("mobile_chapter_manager_btn"),
+                                        )
+                                        HorizontalDivider()
+                                        DropdownMenuItem(
+                                            text = { Text("Deshacer") },
+                                            enabled = canUndoEdit,
+                                            onClick = { showMobileEditMenu = false; onUndoEdit() },
+                                            modifier = Modifier.testTag("mobile_undo_btn"),
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Rehacer") },
+                                            enabled = canRedoEdit,
+                                            onClick = { showMobileEditMenu = false; onRedoEdit() },
+                                            modifier = Modifier.testTag("mobile_redo_btn"),
+                                        )
+                                    }
                                 }
 
                                 Box(
@@ -3552,316 +3865,6 @@ internal fun extractCandidatePhrases(text: String): List<String> {
 }
 
 /**
- * PDF / EPUB DOCUMENT EDITOR WORKSPACE
- */
-@Composable
-private fun DocumentEditorWorkspaceView(
-    palette: MeridianPalette,
-    book: BookDocument,
-    onUpdatePage: (pageNumber: Int, chapterTitle: String, blocks: List<ContentBlock>) -> Unit,
-    onUpdateMetadata: (title: String, subtitle: String, author: String, format: DocumentFormat) -> Unit,
-    onAddPage: (afterPage: Int, chapterTitle: String) -> Unit,
-    onDeletePage: (pageNumber: Int) -> Unit,
-    onPageChange: (Int) -> Unit,
-) {
-    val currentPageObj = book.pages.find { it.pageNumber == book.currentPage } ?: book.pages.first()
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
-
-    var docTitle by remember(book.id, book.title) { mutableStateOf(book.title) }
-    var docSubtitle by remember(book.id, book.subtitle) { mutableStateOf(book.subtitle) }
-    var docAuthor by remember(book.id, book.author) { mutableStateOf(book.author) }
-    var docFormat by remember(book.id, book.format) { mutableStateOf(book.format) }
-
-    var chapterTitle by remember(book.id, currentPageObj.pageNumber, currentPageObj.chapterTitle) {
-        mutableStateOf(currentPageObj.chapterTitle)
-    }
-    var editableBlocks by remember(book.id, currentPageObj.pageNumber, currentPageObj.blocks) {
-        mutableStateOf(currentPageObj.blocks)
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier
-                .width(310.dp)
-                .fillMaxHeight(),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    text = "DOCUMENT METADATA",
-                    color = palette.ink,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = docTitle,
-                    onValueChange = { docTitle = it },
-                    label = { Text("Book / Folio Title", fontSize = 11.sp) },
-                    singleLine = true,
-                    colors = textFieldColors,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shioriTextFieldFocusGuard(),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = docAuthor,
-                    onValueChange = { docAuthor = it },
-                    label = { Text("Author / Press", fontSize = 11.sp) },
-                    singleLine = true,
-                    colors = textFieldColors,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shioriTextFieldFocusGuard(),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DocumentFormat.entries.forEach { fmt ->
-                        val selected = fmt == docFormat
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (selected) palette.accentGreen else palette.pillBg)
-                                .clickable { docFormat = fmt }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Text(
-                                text = fmt.label,
-                                color = if (selected) palette.onAccent else palette.ink,
-                                fontSize = 11.5.sp,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = { onUpdateMetadata(docTitle, docSubtitle, docAuthor, docFormat) },
-                    colors = ButtonDefaults.buttonColors(containerColor = palette.accentGreen, contentColor = palette.onAccent),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Save Metadata", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = palette.border)
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "PAGES (${book.totalPages})",
-                        color = palette.ink,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "+ Insert Page",
-                        color = palette.accentGreen,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable {
-                            onAddPage(book.currentPage, "Chapter ${book.totalPages + 1}")
-                        },
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                book.pages.forEach { p ->
-                    val isCurr = p.pageNumber == book.currentPage
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isCurr) palette.accentGreen else palette.elevatedSurface)
-                            .clickable { onPageChange(p.pageNumber) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Page ${p.pageNumber} · ${p.chapterTitle}",
-                                color = if (isCurr) palette.onAccent else palette.ink,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "${p.wordCount} words · ${p.blocks.size} blocks",
-                                color = if (isCurr) palette.onAccent.copy(alpha = 0.80f) else palette.muted,
-                                fontSize = 10.5.sp,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(18.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "EDITING PAGE ${currentPageObj.pageNumber} (${book.format.label})",
-                        color = palette.ink,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                editableBlocks = editableBlocks + ContentBlock(
-                                    id = "blk_${editableBlocks.size + 1}",
-                                    style = BlockStyle.PARAGRAPH,
-                                    text = "New paragraph added in the Meridian Editor.",
-                                )
-                            },
-                            border = BorderStroke(1.dp, palette.border),
-                        ) {
-                            Text("+ Add Paragraph", color = palette.ink, fontSize = 12.sp)
-                        }
-                        if (book.totalPages > 1) {
-                            OutlinedButton(
-                                onClick = { onDeletePage(currentPageObj.pageNumber) },
-                                border = BorderStroke(1.dp, palette.border),
-                            ) {
-                                Text("Delete Page", color = palette.ink, fontSize = 12.sp)
-                            }
-                        }
-                        Button(
-                            onClick = {
-                                onUpdatePage(currentPageObj.pageNumber, chapterTitle, editableBlocks)
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = palette.accentGreen,
-                                contentColor = palette.onAccent,
-                            ),
-                        ) {
-                            Text("Save Page Changes", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = chapterTitle,
-                    onValueChange = { chapterTitle = it },
-                    label = { Text("Chapter / Running Header Title", fontSize = 11.sp) },
-                    singleLine = true,
-                    colors = textFieldColors,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shioriTextFieldFocusGuard(),
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                editableBlocks.forEachIndexed { idx, block ->
-                    Surface(
-                        color = palette.elevatedSurface,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, palette.border),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    BlockStyle.entries.forEach { st ->
-                                        val sel = st == block.style
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(if (sel) palette.accentGreen else palette.pillBg)
-                                                .clickable {
-                                                    editableBlocks = editableBlocks.toMutableList().also {
-                                                        it[idx] = block.copy(style = st)
-                                                    }
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                                        ) {
-                                            Text(
-                                                text = st.label,
-                                                color = if (sel) palette.onAccent else palette.ink,
-                                                fontSize = 10.5.sp,
-                                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                            )
-                                        }
-                                    }
-                                }
-                                if (editableBlocks.size > 1) {
-                                    Text(
-                                        text = "Remove Block",
-                                        color = palette.muted,
-                                        fontSize = 11.sp,
-                                        modifier = Modifier.clickable {
-                                            editableBlocks = editableBlocks.filterIndexed { i, _ -> i != idx }
-                                        },
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            OutlinedTextField(
-                                value = block.text,
-                                onValueChange = { updatedText ->
-                                    editableBlocks = editableBlocks.toMutableList().also {
-                                        it[idx] = block.copy(text = updatedText)
-                                    }
-                                },
-                                colors = textFieldColors,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .shioriTextFieldFocusGuard(),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
  * SAVED WORDS & PHRASES VAULT (LEXICON)
  */
 @Composable
@@ -3872,6 +3875,7 @@ private fun SavedPhrasesVaultView(
     onSaveNewPhrase: (phrase: String, note: String, tone: HighlightTone) -> Unit,
     onJumpToPhrase: (SavedPhrase) -> Unit,
     onDeletePhrase: (String) -> Unit,
+    onReattachPhrase: (String) -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var newPhraseText by remember { mutableStateOf("") }
@@ -4041,6 +4045,23 @@ private fun SavedPhrasesVaultView(
                                     color = palette.muted,
                                     fontSize = 12.sp,
                                 )
+                                if (item.anchorStatus == AnchorStatus.ORPHANED) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(palette.warningAmber.copy(alpha = 0.18f))
+                                            .border(1.dp, palette.warningAmber, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .semantics { contentDescription = "Anotación huérfana: el texto anclado ya no coincide con la página" },
+                                    ) {
+                                        Text(
+                                            text = "Huérfana",
+                                            color = palette.warningAmber,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -4059,6 +4080,15 @@ private fun SavedPhrasesVaultView(
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (item.anchorStatus == AnchorStatus.ORPHANED) {
+                                OutlinedButton(
+                                    onClick = { onReattachPhrase(item.id) },
+                                    border = BorderStroke(1.dp, palette.warningAmber),
+                                    modifier = Modifier.testTag("reattach_phrase_${item.id}"),
+                                ) {
+                                    Text("Reanclar", color = palette.warningAmber, fontSize = 12.sp)
+                                }
+                            }
                             OutlinedButton(
                                 onClick = { onJumpToPhrase(item) },
                                 border = BorderStroke(1.dp, palette.border),

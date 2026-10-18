@@ -20,9 +20,74 @@ class FolioRepository(
     val state: StateFlow<FolioPersistedState> = _state.asStateFlow()
     val library = LibraryManager(this)
 
+    private val editHistory = EditHistory()
+    private val _editHistoryState = MutableStateFlow(EditHistoryState())
+    val editHistoryState: StateFlow<EditHistoryState> = _editHistoryState.asStateFlow()
+
     internal fun updateLibrary(transform: (FolioPersistedState) -> FolioPersistedState) {
         _state.update(transform)
         saveCurrentState()
+    }
+
+    private fun refreshEditHistoryState() {
+        _editHistoryState.value = EditHistoryState(
+            undoBooks = editHistory.undoBooks,
+            redoBooks = editHistory.redoBooks,
+        )
+    }
+
+    internal fun clearEditHistoryFor(bookIds: Collection<String>) {
+        editHistory.purge(bookIds)
+        refreshEditHistoryState()
+    }
+
+    /**
+     * Applies a mutation on [bookId] recording an Undo/Redo entry with snapshots
+     * of the document and its annotations (non-destructive editing).
+     */
+    private inline fun mutateWithHistory(
+        bookId: String,
+        label: String,
+        mutation: (FolioPersistedState) -> FolioPersistedState,
+    ) {
+        val beforeState = _state.value
+        val beforeDoc = beforeState.documents.find { it.id == bookId } ?: return
+        val beforePhrases = beforeState.savedPhrases.filter { it.bookId == bookId }
+        val beforeReminder = beforeState.reminders[bookId]
+        _state.update(mutation)
+        val afterState = _state.value
+        val afterDoc = afterState.documents.find { it.id == bookId } ?: return
+        val afterPhrases = afterState.savedPhrases.filter { it.bookId == bookId }
+        val afterReminder = afterState.reminders[bookId]
+        if (beforeDoc == afterDoc && beforePhrases == afterPhrases && beforeReminder == afterReminder) return
+        editHistory.record(
+            EditHistory.Entry(bookId, label, beforeDoc, afterDoc, beforePhrases, afterPhrases, beforeReminder, afterReminder),
+        )
+        refreshEditHistoryState()
+    }
+
+    private fun applySnapshot(
+        bookId: String,
+        document: BookDocument,
+        phrases: List<SavedPhrase>,
+        reminder: PageReminder?,
+    ) {
+        _state.update { current ->
+            val knownIds = current.savedPhrases.filter { it.bookId == bookId }.map { it.id }.toSet()
+            val byId = phrases.associateBy { it.id }
+            val rebuiltPhrases = current.savedPhrases.mapNotNull { existing ->
+                if (existing.bookId != bookId) existing else byId[existing.id]
+            } + phrases.filterNot { it.id in knownIds }
+            current.copy(
+                documents = if (current.documents.any { it.id == bookId }) {
+                    current.documents.map { if (it.id == bookId) document else it }
+                } else {
+                    listOf(document) + current.documents
+                },
+                savedPhrases = rebuiltPhrases,
+                reminders = if (reminder == null) current.reminders - bookId else current.reminders + (bookId to reminder),
+            )
+        }
     }
 
     private fun loadInitialState(): FolioPersistedState {
@@ -35,7 +100,7 @@ class FolioRepository(
                 if (decoded != null) {
                     var anyUpgraded = false
                     val upgradedDocs = decoded.documents.map { doc ->
-                        if (doc.parserVersion < 4) {
+                        if (doc.parserVersion < DocumentCodec.CURRENT_PARSER_VERSION) {
                             anyUpgraded = true
                             val rawBytes = doc.filePath?.let { PlatformFileAndZipIo.readFileBytes(it) }
                             if (rawBytes != null && doc.filePath != null) {
@@ -44,11 +109,11 @@ class FolioRepository(
                                 reparsed.copy(
                                     id = doc.id,
                                     currentPage = doc.currentPage.coerceIn(1, reparsed.totalPages),
-                                    parserVersion = 4,
+                                    parserVersion = DocumentCodec.CURRENT_PARSER_VERSION,
                                 )
                             } else {
                                 doc.copy(
-                                    parserVersion = 4,
+                                    parserVersion = DocumentCodec.CURRENT_PARSER_VERSION,
                                     pages = doc.pages.map { page ->
                                         page.copy(
                                             blocks = page.blocks.map { blk ->
@@ -634,6 +699,8 @@ class FolioRepository(
         if (trimmed.isBlank()) return null
         val now = PlatformFileAndZipIo.currentEpochMillis()
         val book = _state.value.documents.find { it.id == bookId } ?: return null
+        val page = book.pages.find { it.pageNumber == pageNumber }
+        val anchor = page?.let { AnnotationAnchorer.anchorForPage(it, trimmed) }
         val entry = SavedPhrase(
             id = "ph_${now}_${trimmed.hashCode().toUInt()}",
             bookId = bookId,
@@ -644,6 +711,10 @@ class FolioRepository(
             note = note.trim(),
             tone = tone,
             createdAtMs = now,
+            anchorPrefix = anchor?.prefix.orEmpty(),
+            anchorSuffix = anchor?.suffix.orEmpty(),
+            anchorChapterTitle = page?.chapterTitle.orEmpty(),
+            anchorStatus = AnchorStatus.ACTIVE,
         )
         _state.update { current ->
             current.copy(savedPhrases = listOf(entry) + current.savedPhrases)
@@ -666,32 +737,203 @@ class FolioRepository(
         newBlocks: List<ContentBlock>,
     ) {
         val now = PlatformFileAndZipIo.currentEpochMillis()
-        _state.update { current ->
-            val updatedDocs = current.documents.map { doc ->
-                if (doc.id != bookId) {
-                    doc
+        mutateWithHistory(bookId, "Editar página $pageNumber") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val updatedPages = doc.pages.map { p ->
+                if (p.pageNumber == pageNumber) {
+                    p.copy(
+                        chapterTitle = newChapterTitle.trim().ifBlank { "Page $pageNumber" },
+                        blocks = newBlocks,
+                        lastEditedEpochMs = now,
+                    )
                 } else {
-                    val updatedPages = doc.pages.map { p ->
-                        if (p.pageNumber == pageNumber) {
-                            p.copy(
-                                chapterTitle = newChapterTitle.trim().ifBlank { "Page $pageNumber" },
-                                blocks = newBlocks,
-                                lastEditedEpochMs = now,
-                            )
-                        } else {
-                            p
-                        }
-                    }
-                    doc.copy(pages = updatedPages, updatedAtMs = now)
+                    p
                 }
             }
+            val updatedDoc = doc.copy(pages = updatedPages, updatedAtMs = now)
+            val reanchoredPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, updatedPages)
             val existingTel = current.telemetry[bookId]
             val updatedTelMap = if (existingTel != null) {
                 current.telemetry + (bookId to existingTel.copy(recalculationCount = existingTel.recalculationCount + 1))
             } else {
                 current.telemetry
             }
-            current.copy(documents = updatedDocs, telemetry = updatedTelMap)
+            current.copy(
+                documents = current.documents.map { if (it.id == bookId) updatedDoc else it },
+                savedPhrases = reanchoredPhrases,
+                telemetry = updatedTelMap,
+            )
+        }
+        saveCurrentState()
+    }
+
+    /** Reemplaza todas las ocurrencias de [query] en el capítulo o libro indicado. */
+    fun replaceAllText(
+        bookId: String,
+        query: String,
+        replacement: String,
+        chapterTitle: String? = null,
+        ignoreCase: Boolean = true,
+    ): Int {
+        var replaced = 0
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        mutateWithHistory(bookId, "Reemplazar «${query.take(24)}»") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val outcome = BookTextReplace.replaceAll(doc.pages, query, replacement, chapterTitle, ignoreCase)
+            replaced = outcome.replacedCount
+            if (outcome.replacedCount == 0) return@mutateWithHistory current
+            val stamped = stampChangedPages(doc.pages, outcome.pages, now)
+            current.copy(
+                documents = current.documents.map {
+                    if (it.id == bookId) doc.copy(pages = stamped, updatedAtMs = now) else it
+                },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, stamped),
+            )
+        }
+        saveCurrentState()
+        return replaced
+    }
+
+    /** Reemplaza una única ocurrencia localizada por una búsqueda previa. */
+    fun replaceTextAt(
+        bookId: String,
+        pageNumber: Int,
+        blockId: String,
+        startIndex: Int,
+        query: String,
+        replacement: String,
+        ignoreCase: Boolean = true,
+    ): Boolean {
+        var done = false
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        mutateWithHistory(bookId, "Reemplazar «${query.take(24)}»") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val outcome = BookTextReplace.replaceOne(doc.pages, pageNumber, blockId, startIndex, query, replacement, ignoreCase)
+            if (outcome.replacedCount == 0) return@mutateWithHistory current
+            done = true
+            val stamped = stampChangedPages(doc.pages, outcome.pages, now)
+            current.copy(
+                documents = current.documents.map {
+                    if (it.id == bookId) doc.copy(pages = stamped, updatedAtMs = now) else it
+                },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, stamped),
+            )
+        }
+        saveCurrentState()
+        return done
+    }
+
+    fun renameChapter(bookId: String, startPage: Int, newTitle: String): Boolean {
+        var changed = false
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        mutateWithHistory(bookId, "Renombrar capítulo") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val pages = ChapterEditing.renameChapter(doc.pages, startPage, newTitle)
+            if (pages == doc.pages) return@mutateWithHistory current
+            changed = true
+            current.copy(
+                documents = current.documents.map {
+                    if (it.id == bookId) doc.copy(pages = pages, updatedAtMs = now) else it
+                },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, pages),
+            )
+        }
+        saveCurrentState()
+        return changed
+    }
+
+    fun moveChapter(bookId: String, startPage: Int, upwards: Boolean): Boolean {
+        var changed = false
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        mutateWithHistory(bookId, "Reordenar capítulos") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val pages = ChapterEditing.moveChapter(doc.pages, startPage, upwards) ?: return@mutateWithHistory current
+            changed = true
+            current.copy(
+                documents = current.documents.map {
+                    if (it.id == bookId) {
+                        doc.copy(pages = pages, currentPage = doc.currentPage.coerceIn(1, pages.size), updatedAtMs = now)
+                    } else {
+                        it
+                    }
+                },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, pages),
+            )
+        }
+        saveCurrentState()
+        return changed
+    }
+
+    fun repairTableOfContents(bookId: String): Boolean {
+        var changed = false
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        mutateWithHistory(bookId, "Reparar TOC") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val pages = ChapterEditing.repairTitles(doc.pages)
+            if (pages == doc.pages) return@mutateWithHistory current
+            changed = true
+            current.copy(
+                documents = current.documents.map {
+                    if (it.id == bookId) doc.copy(pages = pages, updatedAtMs = now) else it
+                },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, pages),
+            )
+        }
+        saveCurrentState()
+        return changed
+    }
+
+    private fun stampChangedPages(before: List<BookPage>, after: List<BookPage>, now: Long): List<BookPage> =
+        after.mapIndexed { index, page ->
+            val old = before.getOrNull(index)
+            if (old != null && old.blocks != page.blocks) page.copy(lastEditedEpochMs = now) else page
+        }
+
+    fun canUndoEdit(bookId: String): Boolean = editHistory.canUndo(bookId)
+
+    fun canRedoEdit(bookId: String): Boolean = editHistory.canRedo(bookId)
+
+    fun undoEdit(bookId: String): Boolean {
+        val entry = editHistory.undoEntry(bookId) ?: return false
+        applySnapshot(entry.bookId, entry.beforeDocument, entry.beforePhrases, entry.beforeReminder)
+        saveCurrentState()
+        refreshEditHistoryState()
+        return true
+    }
+
+    fun redoEdit(bookId: String): Boolean {
+        val entry = editHistory.redoEntry(bookId) ?: return false
+        applySnapshot(entry.bookId, entry.afterDocument, entry.afterPhrases, entry.afterReminder)
+        saveCurrentState()
+        refreshEditHistoryState()
+        return true
+    }
+
+    /** Reancla manualmente una anotación huérfana sobre una ocurrencia elegida. */
+    fun reattachPhrase(
+        phraseId: String,
+        pageNumber: Int,
+        chapterTitle: String,
+        anchorPrefix: String,
+        anchorSuffix: String,
+    ) {
+        val phrase = _state.value.savedPhrases.find { it.id == phraseId } ?: return
+        mutateWithHistory(phrase.bookId, "Reanclar anotación") { current ->
+            current.copy(
+                savedPhrases = current.savedPhrases.map {
+                    if (it.id == phraseId) {
+                        it.copy(
+                            pageNumber = pageNumber,
+                            anchorChapterTitle = chapterTitle,
+                            anchorPrefix = anchorPrefix,
+                            anchorSuffix = anchorSuffix,
+                            anchorStatus = AnchorStatus.ACTIVE,
+                        )
+                    } else {
+                        it
+                    }
+                },
+            )
         }
         saveCurrentState()
     }
@@ -699,34 +941,41 @@ class FolioRepository(
     fun updateDocumentMetadata(
         bookId: String,
         newTitle: String,
-        newSubtitle: String,
         newAuthor: String,
-        newFormat: DocumentFormat,
+        newLanguage: String? = null,
+        newCoverImagePath: String? = null,
     ) {
         val now = PlatformFileAndZipIo.currentEpochMillis()
-        _state.update { current ->
-            val updatedDocs = current.documents.map { doc ->
-                if (doc.id == bookId) {
-                    doc.copy(
-                        title = newTitle.trim().ifBlank { doc.title },
-                        subtitle = newSubtitle.trim(),
-                        author = newAuthor.trim().ifBlank { doc.author },
-                        format = newFormat,
-                        updatedAtMs = now,
-                    )
-                } else {
-                    doc
-                }
-            }
-            current.copy(documents = updatedDocs)
+        mutateWithHistory(bookId, "Editar metadatos") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            val updatedDoc = doc.copy(
+                title = newTitle.trim().ifBlank { doc.title },
+                author = newAuthor.trim().ifBlank { doc.author },
+                language = newLanguage?.trim() ?: doc.language,
+                coverImagePath = when {
+                    newCoverImagePath == null -> doc.coverImagePath
+                    newCoverImagePath.isBlank() -> null
+                    else -> newCoverImagePath
+                },
+                updatedAtMs = now,
+            )
+            current.copy(
+                documents = current.documents.map { if (it.id == bookId) updatedDoc else it },
+                savedPhrases = current.savedPhrases.map {
+                    if (it.bookId == bookId) it.copy(bookTitle = updatedDoc.title) else it
+                },
+                reminders = current.reminders.mapValues { (id, reminder) ->
+                    if (id == bookId) reminder.copy(bookTitle = updatedDoc.title) else reminder
+                },
+            )
         }
         saveCurrentState()
     }
 
     fun addNewPage(bookId: String, afterPageNumber: Int? = null, chapterTitle: String = "New Folio Leaf") {
         val now = PlatformFileAndZipIo.currentEpochMillis()
-        _state.update { current ->
-            val doc = current.documents.find { it.id == bookId } ?: return@update current
+        mutateWithHistory(bookId, "Añadir página") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
             val insertIdx = (afterPageNumber ?: doc.totalPages).coerceIn(0, doc.pages.size)
             val mutablePages = doc.pages.toMutableList()
             val newPageNum = insertIdx + 1
@@ -758,6 +1007,14 @@ class FolioRepository(
             )
             current.copy(
                 documents = current.documents.map { if (it.id == bookId) updatedDoc else it },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, renumbered),
+                reminders = current.reminders.mapValues { (id, reminder) ->
+                    if (id == bookId && reminder.pageNumber >= newPageNum) {
+                        reminder.copy(pageNumber = reminder.pageNumber + 1)
+                    } else {
+                        reminder
+                    }
+                },
             )
         }
         saveCurrentState()
@@ -765,9 +1022,9 @@ class FolioRepository(
 
     fun deletePage(bookId: String, pageNumber: Int) {
         val now = PlatformFileAndZipIo.currentEpochMillis()
-        _state.update { current ->
-            val doc = current.documents.find { it.id == bookId } ?: return@update current
-            if (doc.pages.size <= 1) return@update current
+        mutateWithHistory(bookId, "Eliminar página") { current ->
+            val doc = current.documents.find { it.id == bookId } ?: return@mutateWithHistory current
+            if (doc.pages.size <= 1) return@mutateWithHistory current
             val filtered = doc.pages.filterNot { it.pageNumber == pageNumber }
                 .mapIndexed { idx, p -> p.copy(pageNumber = idx + 1) }
             val nextCurr = doc.currentPage.coerceIn(1, filtered.size)
@@ -778,6 +1035,16 @@ class FolioRepository(
             )
             current.copy(
                 documents = current.documents.map { if (it.id == bookId) updatedDoc else it },
+                savedPhrases = AnnotationAnchorer.reanchorBook(current.savedPhrases, bookId, filtered),
+                reminders = current.reminders.mapValues { (id, reminder) ->
+                    if (id == bookId && reminder.pageNumber > pageNumber) {
+                        reminder.copy(pageNumber = reminder.pageNumber - 1)
+                    } else if (id == bookId) {
+                        reminder.copy(pageNumber = reminder.pageNumber.coerceIn(1, filtered.size))
+                    } else {
+                        reminder
+                    }
+                },
             )
         }
         saveCurrentState()
@@ -804,7 +1071,7 @@ class FolioRepository(
                         ContentBlock(
                             "b_${now}_2",
                             BlockStyle.PARAGRAPH,
-                            "This ${format.label} manuscript was created in Meridian Folio. Switch to the Editor tab to add paragraphs, quotes, and additional pages, or export directly to a .${format.extension} file.",
+                            "This ${format.label} manuscript was created in Meridian Folio. Use the reader's editing tools (search, page editing, chapter manager) to refine paragraphs and chapters, or export directly to a .${format.extension} file.",
                         ),
                     ),
                     lastEditedEpochMs = now,
@@ -829,9 +1096,61 @@ class FolioRepository(
         return runCatching { library.importFile(path, select = true) }.getOrNull()
     }
 
-    fun exportDocumentToFile(bookId: String, targetPath: String): Boolean {
-        val doc = _state.value.documents.find { it.id == bookId } ?: return false
+    fun exportDocumentToFile(bookId: String, targetPath: String): Boolean =
+        exportDocumentWithReport(bookId, targetPath) != null
+
+    /**
+     * Exports [bookId] to [targetPath] and returns the structural validation report
+     * (plus epubcheck output when the CLI tool is installed on the system).
+     */
+    fun exportDocumentWithReport(bookId: String, targetPath: String): ExportValidationReport? {
+        val doc = _state.value.documents.find { it.id == bookId } ?: return null
         val bytes = DocumentCodec.exportToBytes(doc)
-        return PlatformFileAndZipIo.writeFileBytes(targetPath, bytes)
+        if (!PlatformFileAndZipIo.writeFileBytes(targetPath, bytes)) return null
+        val report = EpubExportValidator.validateStructure(bytes)
+        val epubcheckOutput = if (doc.format == DocumentFormat.EPUB) {
+            PlatformTooling.runEpubcheck(targetPath)
+        } else {
+            null
+        }
+        return report.copy(epubcheckOutput = epubcheckOutput)
+    }
+
+    // ---- Portable personal-data backup ----
+
+    fun exportBackupToFile(targetPath: String): BackupExportSummary? {
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        val (bundle, summary) = BackupCodec.buildBundle(_state.value, now)
+        val written = PlatformFileAndZipIo.writeFileBytes(targetPath, BackupCodec.encode(bundle).encodeToByteArray())
+        return if (written) summary else null
+    }
+
+    /** Reads a backup file header for confirmation UI without applying anything. */
+    fun peekBackupFile(path: String): BackupPeek? {
+        val bytes = PlatformFileAndZipIo.readFileBytes(path) ?: return null
+        val bundle = runCatching { BackupCodec.decode(bytes.decodeToString()) }.getOrNull() ?: return null
+        return BackupPeek(
+            exportedAtMs = bundle.exportedAtMs,
+            documentCount = bundle.documents.size,
+            phraseCount = bundle.savedPhrases.size,
+            reminderCount = bundle.reminders.size,
+            collectionCount = bundle.collections.size,
+        )
+    }
+
+    /**
+     * Restores a backup: books are matched by content fingerprint, personal data is
+     * replaced for matched books, and unmatched entries are reported instead of dropped.
+     */
+    fun importBackupFromFile(path: String): BackupImportSummary? {
+        val bytes = PlatformFileAndZipIo.readFileBytes(path) ?: return null
+        val bundle = runCatching { BackupCodec.decode(bytes.decodeToString()) }.getOrNull() ?: return null
+        val now = PlatformFileAndZipIo.currentEpochMillis()
+        val (updated, summary) = BackupCodec.applyBundle(_state.value, bundle, now)
+        _state.value = updated
+        editHistory.clear()
+        refreshEditHistoryState()
+        saveCurrentState()
+        return summary
     }
 }

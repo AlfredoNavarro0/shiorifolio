@@ -90,6 +90,40 @@ fun main(args: Array<String>) {
                         onSelected(File(dir, file).absolutePath)
                     }
                 },
+                onPickBackupFileToImport = { onSelected ->
+                    val dialog = FileDialog(null as Frame?, "Import ShioriFolio Backup", FileDialog.LOAD)
+                    dialog.setFilenameFilter { _, name -> name.lowercase().endsWith(".json") }
+                    dialog.isVisible = true
+                    val dir = dialog.directory
+                    val file = dialog.file
+                    if (dir != null && file != null) {
+                        onSelected(File(dir, file).absolutePath)
+                    }
+                },
+                onPickBackupFileToExport = { defaultName, onSelected ->
+                    val dialog = FileDialog(null as Frame?, "Export ShioriFolio Backup", FileDialog.SAVE)
+                    dialog.file = defaultName
+                    dialog.isVisible = true
+                    val dir = dialog.directory
+                    val file = dialog.file
+                    if (dir != null && file != null) {
+                        onSelected(File(dir, file).absolutePath)
+                    }
+                },
+                onPickImageFile = { onSelected ->
+                    val dialog = FileDialog(null as Frame?, "Choose Cover Image", FileDialog.LOAD)
+                    dialog.setFilenameFilter { _, name ->
+                        val lower = name.lowercase()
+                        lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                            lower.endsWith(".webp") || lower.endsWith(".gif")
+                    }
+                    dialog.isVisible = true
+                    val dir = dialog.directory
+                    val file = dialog.file
+                    if (dir != null && file != null) {
+                        onSelected(File(dir, file).absolutePath)
+                    }
+                },
             )
         }
     }

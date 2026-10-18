@@ -152,6 +152,17 @@ flowchart LR
 ### Iteración 6 — Edición y Anotación Avanzada de EPUB, Persistencia y Accesibilidad
 **Cubre:** Puntos 9 (*Edición y anotación de EPUB*) y 10 (*Persistencia, respaldo, accesibilidad y verificación*).
 
+**Estado de implementación (18 de octubre de 2026):** implementada. La edición vive en el estado del lector; el archivo EPUB original nunca se modifica y los cambios se materializan al exportar.
+
+- Motores de dominio en `BookEditing.kt` (buscar/reemplazar, reanclaje por prefijo/frase/sufijo/capítulo, renombrado/reordenado/reparación de capítulos), historial por sesión en `EditHistory.kt`, respaldo en `BackupModels.kt`/`BackupCodec.kt` y validación estructural en `EpubExportValidator.kt` con `PlatformTooling` (*epubcheck* opcional).
+- Interfaz de edición en `EditingWorkspace.kt`: buscar/reemplazar con vista previa (capítulo o libro completo), corrección de palabras/párrafos, gestión de capítulos, metadatos (título, autor, idioma, portada) y reanclaje de anotaciones. En escritorio, acciones en la barra superior; en móvil, menú «✎» en el HUD.
+- Deshacer/Rehacer por libro con instantáneas (documento, anotaciones y recordatorio), expuesto como `editHistoryState`; atajos `Ctrl+Z` y `Ctrl+Y` reasignables.
+- Anotaciones huérfanas señaladas en el cuaderno con acción **Reanclar**: cuando el ancla no puede resolverse con confianza, la nota se marca en lugar de moverse en silencio.
+- Exportación regenera `content.opf`, `nav.xhtml`/`toc.ncx`, `dc:language` y portada incrustada; cada export se valida (estructura + `epubcheck` cuando está instalado). La importación lee `dc:language`; `DocumentCodec.CURRENT_PARSER_VERSION = 5` re-analiza una vez los libros guardados.
+- Respaldo portátil `.json` (exportar/importar desde **Ajustes → Datos**): los libros se reasocian por huella SHA-256, las colecciones por nombre y los libros ausentes se informan sin eliminar nada. E/S de respaldo en `Dispatchers.IO`.
+- Verificación automatizada: `EditingIntegrationTest` (core, 11 pruebas) y `EditingUiTest` (UI, 6 pruebas) sobre la suite completa — `:core:desktopTest` (23), `:ui:desktopTest` (23), `:desktopApp:classes` y `:androidApp:compileDebugKotlin` en verde.
+- Pendiente de validación manual: selectores SAF de respaldo en Android (hoy usa el diálogo de ruta tipada, igual que importar/exportar), y ejecución real de `epubcheck` en un entorno que lo tenga instalado.
+
 1. **Separación de Capas y Edición Gradual de EPUB (Punto 9)**:
    - Separar claramente en el modelo de datos:
      1. **Preferencias de visualización por libro** (`BookReadingPreferences`).

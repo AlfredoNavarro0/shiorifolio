@@ -79,6 +79,7 @@ internal fun LibraryWorkspace(
     var showTools by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var reloadBook by remember { mutableStateOf<BookDocument?>(null) }
+    var metadataBook by remember { mutableStateOf<BookDocument?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val books = remember(state.documents, state.telemetry, state.libraryPreferences, filter) { queryLibrary(state, filter) }
@@ -160,9 +161,22 @@ internal fun LibraryWorkspace(
                         onOpenBook(book.id)
                     },
                     onExport = { exportBook(book) },
-                    onReload = { reloadBook = book })
+                    onReload = { reloadBook = book },
+                    onEditMetadata = { metadataBook = book })
             }
         }
+    }
+    metadataBook?.let { book ->
+        BookMetadataDialog(
+            palette = palette,
+            book = book,
+            coverPicker = null,
+            onSave = { title, author, language, coverImagePath ->
+                repository.updateDocumentMetadata(book.id, title, author, language, coverImagePath)
+                message = "Metadatos de \"$title\" actualizados."
+            },
+            onClose = { metadataBook = null },
+        )
     }
     reloadBook?.let { book ->
         AlertDialog(
@@ -416,11 +430,11 @@ private fun LibraryFileTools(repository: FolioRepository, palette: MeridianPalet
 @Composable
 private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?, palette: MeridianPalette,
     prefs: LibraryPreferences, selected: Boolean, selectionMode: Boolean, reminder: PageReminder?, onToggleSelection: () -> Unit, onOpen: () -> Unit,
-    onExport: () -> Unit, onReload: () -> Unit,
+    onExport: () -> Unit, onReload: () -> Unit, onEditMetadata: () -> Unit,
 ) {
     val detailed = prefs.density == LibraryDensity.DETAILED
     if (prefs.layout == LibraryLayout.CARDS) {
-        LibraryBookCard(book, telemetry, palette, detailed, selected, selectionMode, reminder, onToggleSelection, onOpen, onExport, onReload)
+        LibraryBookCard(book, telemetry, palette, detailed, selected, selectionMode, reminder, onToggleSelection, onOpen, onExport, onReload, onEditMetadata)
         return
     }
     val prediction = remember(book, telemetry) { ReadingPredictionEngine.computePrediction(book, telemetry) }
@@ -441,6 +455,7 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
                 }
                 Column {
                     LibraryAction("Abrir", "library_open_${book.id}") { onOpen() }
+                    LibraryAction("Metadatos", "library_edit_metadata_${book.id}") { onEditMetadata() }
                     if (detailed) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         LibraryAction("Exportar", "library_export_${book.id}") { onExport() }
                         if (book.filePath != null) LibraryAction("Recargar", "library_reload_${book.id}", enabled = !book.isMissingOnDisk) { onReload() }
@@ -455,6 +470,7 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
                     Text(book.author, color = palette.inkSoft, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 LibraryAction("Abrir", "library_open_${book.id}") { onOpen() }
+                LibraryAction("Metadatos", "library_edit_metadata_${book.id}") { onEditMetadata() }
             }
             if (detailed) {
                 LibraryBookMetrics(book, telemetry, prediction, palette, reminder)
@@ -482,8 +498,9 @@ private fun LibraryBookMetrics(book: BookDocument, telemetry: BookReadingTelemet
 
 @Composable
 internal fun LibraryCover(book: BookDocument, palette: MeridianPalette) {
-    val coverPath = remember(book.id, book.pages) {
-        book.pages.firstOrNull()?.blocks?.firstOrNull { it.style == BlockStyle.IMAGE }?.imagePath
+    val coverPath = remember(book.id, book.pages, book.coverImagePath) {
+        book.coverImagePath?.takeIf { it.isNotBlank() }
+            ?: book.pages.firstOrNull()?.blocks?.firstOrNull { it.style == BlockStyle.IMAGE }?.imagePath
     }
     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, coverPath) {
         value = withContext(Dispatchers.Default) {
