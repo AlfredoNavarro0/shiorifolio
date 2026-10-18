@@ -108,8 +108,9 @@ class LibraryWorkspaceTest {
         val book = repo.state.value.documents.first()
         repo.library.setStatus(setOf(book.id), LibraryStatus.READING)
         waitForIdle()
+        val reading = repo.state.value.documents.count { it.libraryStatus == LibraryStatus.READING }
         onNodeWithTag("library_quick_status_READING").performClick()
-        onNodeWithTag("library_count").assertTextEquals("1 / $total volúmenes")
+        onNodeWithTag("library_count").assertTextEquals("$reading / $total volúmenes")
         onNodeWithTag("library_layout_CARDS").performClick()
         val progress = onNodeWithTag("library_progress_${book.id}")
         progress.assertExists()

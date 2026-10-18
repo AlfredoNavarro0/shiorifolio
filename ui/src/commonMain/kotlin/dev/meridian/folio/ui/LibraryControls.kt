@@ -86,9 +86,10 @@ internal fun ClayContentCard(
  * Kept contract (pinned by `LibraryWorkspaceTest` and the migration plan): `library_count`
  * (`"$visibles / $total volúmenes"`), `library_tools` (the single import control), `library_search`,
  * `library_layout_<NAME>`, `library_density_<NAME>`, `library_quick_format_<FORMAT>`,
- * `library_select_all`, plus the legacy `library_quick_all` / `library_quick_reading` /
- * `library_filters` aliases of the restyled chips. New (additive): `library_header`,
- * `library_toolbar`, `library_filters_btn` and `library_quick_status_<STATUS|ALL>`.
+ * `library_select_all`, `library_filters_btn` and `library_folders`. The essential controls
+ * (`library_select_all`, `library_filters_btn`, `library_folders`) are pinned outside the scrolling
+ * chip row so they never scroll off-screen. New (additive): `library_header`, `library_toolbar`
+ * and `library_quick_status_<STATUS|ALL>`.
  */
 @Composable
 internal fun LibraryControls(
@@ -221,7 +222,7 @@ private fun LibraryQuickToolbar(
     onSelectAll: () -> Unit,
 ) {
     // The card is explicitly sized (its layers are matchParentSize children): two chip rows of
-    // 40.dp plus the card padding. Both rows scroll horizontally, so they never wrap past it.
+    // 40.dp plus the card padding. The rows never wrap past it; where a row can overflow it scrolls.
     ClayCard(Modifier.fillMaxWidth().heightIn(min = LibraryToolbarCardHeight).testTag("library_toolbar")) {
         Column(
             Modifier.fillMaxWidth().padding(ClaySpacing.sm),
@@ -233,27 +234,22 @@ private fun LibraryQuickToolbar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val allSelected = filter.statuses.isEmpty() && filter.formats.isEmpty() && filter.collectionId == null
-                LegacyTag("library_quick_all") {
-                    ClayChip(
-                        "Todos (${state.documents.size})", allSelected,
-                        onClick = { onFilter(filter.copy(statuses = emptySet(), formats = emptySet(), collectionId = null)) },
-                        tag = "library_quick_status_ALL",
-                    )
-                }
+                ClayChip(
+                    "Todos (${state.documents.size})", allSelected,
+                    onClick = { onFilter(filter.copy(statuses = emptySet(), formats = emptySet(), collectionId = null)) },
+                    tag = "library_quick_status_ALL",
+                )
                 LibraryStatus.entries.forEach { status ->
                     val count = state.documents.count { it.libraryStatus == status }
                     if (count == 0) return@forEach
-                    val chip: @Composable () -> Unit = {
-                        ClayChip(
-                            "${status.label} ($count)",
-                            selected = status in filter.statuses,
-                            onClick = {
-                                onFilter(filter.copy(statuses = if (status in filter.statuses) emptySet() else setOf(status)))
-                            },
-                            tag = "library_quick_status_${status.name}",
-                        )
-                    }
-                    if (status == LibraryStatus.READING) LegacyTag("library_quick_reading") { chip() } else chip()
+                    ClayChip(
+                        "${status.label} ($count)",
+                        selected = status in filter.statuses,
+                        onClick = {
+                            onFilter(filter.copy(statuses = if (status in filter.statuses) emptySet() else setOf(status)))
+                        },
+                        tag = "library_quick_status_${status.name}",
+                    )
                 }
                 state.collections.forEach { collection ->
                     ClayChip(
@@ -273,50 +269,50 @@ private fun LibraryQuickToolbar(
                 }
             }
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Only the view switcher scrolls; the essential controls below stay pinned so they
+                // remain visible at any width instead of scrolling off-screen.
                 Row(
-                    Modifier.clip(RoundedCornerShape(percent = 50)).background(palette.surfaceSecondary).padding(3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    LibraryLayout.entries.forEach { layout ->
-                        ClayChip(
-                            if (layout == LibraryLayout.CARDS) "Pósteres" else "Lista",
-                            selected = prefs.layout == layout,
-                            onClick = { onPreferences(prefs.copy(layout = layout)) },
-                            tag = "library_layout_${layout.name}",
-                        )
-                    }
-                    LibraryDensity.entries.forEach { density ->
-                        ClayChip(
-                            density.label,
-                            selected = prefs.density == density,
-                            onClick = { onPreferences(prefs.copy(density = density)) },
-                            tag = "library_density_${density.name}",
-                        )
+                    Row(
+                        Modifier.clip(RoundedCornerShape(percent = 50)).background(palette.surfaceSecondary).padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        LibraryLayout.entries.forEach { layout ->
+                            ClayChip(
+                                if (layout == LibraryLayout.CARDS) "Pósteres" else "Lista",
+                                selected = prefs.layout == layout,
+                                onClick = { onPreferences(prefs.copy(layout = layout)) },
+                                tag = "library_layout_${layout.name}",
+                            )
+                        }
+                        LibraryDensity.entries.forEach { density ->
+                            ClayChip(
+                                density.label,
+                                selected = prefs.density == density,
+                                onClick = { onPreferences(prefs.copy(density = density)) },
+                                tag = "library_density_${density.name}",
+                            )
+                        }
                     }
                 }
-                LegacyTag("library_filters") {
-                    ClayChromeAction(
-                        "Filtros y orden " + if (filtersOpen) "▴" else "▾",
-                        palette,
-                        "library_filters_btn",
-                        selected = filtersOpen,
-                        onClick = onFilters,
-                    )
-                }
+                ClayChromeAction(
+                    "Filtros y orden " + if (filtersOpen) "▴" else "▾",
+                    palette,
+                    "library_filters_btn",
+                    selected = filtersOpen,
+                    onClick = onFilters,
+                )
                 ClayChromeAction("Carpetas", palette, "library_folders", onClick = onFolders)
                 ClayChromeAction("Seleccionar", palette, "library_select_all", onClick = onSelectAll)
             }
         }
     }
-}
-
-/** Keeps a pre-migration test tag alive around a restyled control (plan §Task 6, step 4). */
-@Composable
-private fun LegacyTag(tag: String, content: @Composable () -> Unit) {
-    Box(Modifier.testTag(tag)) { content() }
 }

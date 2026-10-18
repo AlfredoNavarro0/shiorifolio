@@ -247,9 +247,15 @@ internal fun LibraryBookCard(
     }
 }
 
-/** Status band, page/percent hint and the real progress track of the card. */
+/**
+ * Status band and, when there is real progress, the page hint and the progress track of the card.
+ * The track (and its `library_progress_<id>` tag) only exists for READING/FINISHED books or once
+ * the book has actually moved, so an untouched PENDING card shows neither a bar nor a stray `0%`.
+ */
 @Composable
 private fun LibraryCardProgressFooter(book: BookDocument, palette: ClayPalette, percent: Int) {
+    val status = book.libraryStatus
+    val hasProgress = status == LibraryStatus.READING || status == LibraryStatus.FINISHED || book.libraryProgress() > 0f
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             Modifier.fillMaxWidth(),
@@ -257,14 +263,15 @@ private fun LibraryCardProgressFooter(book: BookDocument, palette: ClayPalette, 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LibraryStatusBand(book, palette, percent)
-            Text(
-                if (book.libraryStatus == LibraryStatus.READING) "Pág ${book.currentPage}" else "$percent%",
+            // The status band already carries the percentage for the non-reading states.
+            if (status == LibraryStatus.READING) Text(
+                "Pág ${book.currentPage}",
                 color = palette.textMuted,
                 style = LocalClayTypography.current.labelSm,
                 maxLines = 1,
             )
         }
-        ClayProgressBar(book.libraryProgress(), tag = "library_progress_${book.id}")
+        if (hasProgress) ClayProgressBar(book.libraryProgress(), tag = "library_progress_${book.id}")
     }
 }
 
