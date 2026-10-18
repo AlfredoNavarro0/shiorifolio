@@ -1,5 +1,18 @@
 # Sistema de Diseño y Arquitectura Visual — ShioriFolio (栞 · Folio)
 
+## Dirección actual: Reader y Biblioteca modernos (octubre de 2026)
+
+Reader y Biblioteca usan ahora una interfaz de superficies neutras, acentos verdes y navegación sans serif. Esta dirección sustituye los tratamientos vintage de la interfaz descritos más abajo; la tipografía del contenido sigue siendo configurable y los tonos Sepia y Salvia conservan su carácter de lectura.
+
+- **Navegación:** wordmark, pestañas redondeadas y conmutador claro/oscuro. Las pestañas permiten desplazamiento horizontal cuando falta espacio. Las herramientas de lectura aparecen en Reader.
+- **Reader:** título y autor junto al historial y el ajuste de página. Capítulos permanecen a mano; anotaciones y color de PDF se agrupan en el menú de herramientas. Hoja de lectura con sombra sutil, dock de paginación y vistas, sin barra fija de estado. Los modos paginados dividen el contenido en hojas completas; el desplazamiento continuo queda reservado a su modo explícito.
+- **Biblioteca:** cabecera «Tu biblioteca», importación principal, búsqueda, controles de vista y filtros ligeros. Pósteres 2:3 en una cuadrícula adaptable; títulos sans serif, progreso sobre la portada y opciones contextuales. Los libros sin imagen tienen una portada tipográfica generada con los datos reales.
+- **Ajustes:** categorías Apariencia, Lectura y Atajos, con controles alineados y una sola categoría visible. Typography & Editor se retira de la navegación; la telemetría funciona en segundo plano.
+- **Claro:** fondo `#F5F6F8`, superficie `#FFFFFF`, texto `#1C2430`, acento `#326B59`.
+- **Oscuro:** fondo `#15181E`, superficie `#1E232B`, texto `#F0F3F6`, acento `#91CEB5`.
+
+Los tokens efectivos están en `MeridianTheme.kt`; el chrome compartido está en `ModernReaderChrome.kt`. Las secciones siguientes conservan la referencia editorial original y la documentación de los motores de lectura.
+
 Este documento describe la dirección de arte, los tokens de diseño, la anatomía de la interfaz (**Serene Vintage Reader** para Escritorio y Móvil Kindle) y las decisiones de arquitectura de **ShioriFolio (`shiorifolio`)**.
 
 ---

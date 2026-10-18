@@ -12,7 +12,7 @@ enum class DocumentFormat(val label: String, val extension: String) {
 enum class PageViewMode(val label: String, val shortTag: String, val stitchLabel: String, val description: String) {
     ONE_COLUMN("Página Individual", "1-Col", "Simple", "Vista enfocada de una sola página"),
     TWO_COLUMNS("Doble Página", "2-Col", "Doble página", "Pliego abierto de dos páginas lado a lado"),
-    VERTICAL_PAGINATED("Desplazamiento por Páginas", "V-Págs", "Scroll Págs", "Desplazamiento vertical por páginas con separación visual"),
+    VERTICAL_PAGINATED("Lectura Paginada", "V-Págs", "Paginado", "Avance por páginas completas sin desplazamiento dentro de la hoja"),
     VERTICAL_CONTINUOUS("Desplazamiento Continuo", "V-Cont", "Continuo", "Desplazamiento vertical continuo de lectura seguida"),
     REFLOW_TEXT("Texto Adaptable (Reflujo)", "Reflujo", "Reflujo", "Texto adaptable reconstruido para lectura fluida"),
     STRETCH("Stretch", "Stretch", "Stretch", "Full-viewport proportional page stretch"),
@@ -100,6 +100,12 @@ data class BookDocument(
     val parserVersion: Int = 1,
     val createdAtMs: Long = 0L,
     val updatedAtMs: Long = 0L,
+    val libraryStatus: LibraryStatus = LibraryStatus.PENDING,
+    val collectionIds: Set<String> = emptySet(),
+    val completedAtMs: Long? = null,
+    val contentSha256: String? = null,
+    val sources: List<LibrarySource> = emptyList(),
+    val isMissingOnDisk: Boolean = false,
 ) {
     val totalPages: Int
         get() = pages.size.coerceAtLeast(1)
@@ -365,6 +371,10 @@ data class BookViewPreference(
 
 @Serializable
 data class FolioPersistedState(
+    val watchedFolders: List<WatchedFolder> = emptyList(),
+    val collections: List<LibraryCollection> = emptyList(),
+    val libraryPreferences: LibraryPreferences = LibraryPreferences(),
+    val excludedLibraryPaths: Set<String> = emptySet(),
     val documents: List<BookDocument> = emptyList(),
     val selectedBookId: String? = null,
     val viewMode: PageViewMode = PageViewMode.TWO_COLUMNS,

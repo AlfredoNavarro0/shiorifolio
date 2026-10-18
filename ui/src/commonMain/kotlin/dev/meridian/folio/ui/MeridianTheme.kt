@@ -161,23 +161,22 @@ fun shioriOutlinedTextFieldColors(palette: MeridianPalette): TextFieldColors =
     )
 
 object MeridianDesign {
-    // 1. Kindle Cálido / Hueso (#FCF9F3) — Stitch Default Warm Paper
+    // Modern neutral canvas; Sepia and Sage retain dedicated reading tints.
     val WhitePalette = MeridianPalette(
         isDark = false,
-        paper = Color(0xFFFCF9F3),       // Kindle warm e-ink paper surface (#fcf9f3)
-        pageSurface = Color(0xFFFFFFFF), // Pure folio spread card (#ffffff)
-        elevatedSurface = Color(0xFFF6F3ED),
-        ink = Color(0xFF1C1C18),         // Deep carbon ink (#1c1c18)
-        inkSoft = Color(0xFF424842),     // Editorial secondary ink (#424842)
-        muted = Color(0xFF686E67),       // High-legibility archival caption & outline
-        border = Color(0xFFEBDCCB),      // Warm parchment rule (#ebdccb)
-        pillBg = Color(0xFFF0EDE7),      // Surface container (#f0ede7)
-        accentGreen = Color(0xFF3C4E40), // Sage 700 primary (#3c4e40)
-        warningAmber = Color(0xFF984629),// Terracotta / Amber Ribbon (#984629 / #b46b38)
+        paper = Color(0xFFF5F6F8),
+        pageSurface = Color(0xFFFFFFFF),
+        elevatedSurface = Color(0xFFEBEEF2),
+        ink = Color(0xFF1C2430),
+        inkSoft = Color(0xFF4D5968),
+        muted = Color(0xFF667180),
+        border = Color(0xFFDEE3E9),
+        pillBg = Color(0xFFEDF1F5),
+        accentGreen = Color(0xFF326B59),
+        warningAmber = Color(0xFF97603B),
         onAccent = Color(0xFFFFFFFF),
         onWarningAmber = Color(0xFFFFFFFF),
     )
-
     // 2. Sepia (#F5EDDB) — Stitch Warm Antiquarian Parchment
     val SepiaPalette = MeridianPalette(
         isDark = false,
@@ -215,22 +214,22 @@ object MeridianDesign {
     // 4. Oscuro / Noche Atenuada (#1E1B18) — High-Contrast Nocturnal Reading Surface
     val DarkPalette = MeridianPalette(
         isDark = true,
-        paper = Color(0xFF1E1B18),       // Deep warm obsidian canvas
-        pageSurface = Color(0xFF272320), // Distinct dark folio leaf surface
-        elevatedSurface = Color(0xFF312C28),
-        ink = Color(0xFFF2ECE1),         // Crisp warm ivory ink (high contrast >= 12:1)
-        inkSoft = Color(0xFFD5CDC0),     // Clear secondary ink (contrast >= 8.5:1)
-        muted = Color(0xFFA89F92),       // Accessible muted captions & labels (contrast >= 5.2:1)
-        border = Color(0xFF4A433D),      // Clear warm border rule
-        pillBg = Color(0xFF36302B),      // Elevated pill container
-        accentGreen = Color(0xFF94C2A0), // Luminous botanical sage for dark surfaces
+        paper = Color(0xFF15181E),
+        pageSurface = Color(0xFF1E232B),
+        elevatedSurface = Color(0xFF282F39),
+        ink = Color(0xFFF0F3F6),
+        inkSoft = Color(0xFFC4CDD8),
+        muted = Color(0xFF9DAABB),
+        border = Color(0xFF35404D),
+        pillBg = Color(0xFF2A333E),
+        accentGreen = Color(0xFF91CEB5),
         warningAmber = Color(0xFFE59866),// Warm readable amber
-        onAccent = Color(0xFF111C14),    // Deep dark ink on luminous sage buttons/badges
+        onAccent = Color(0xFF111C14),
         onWarningAmber = Color(0xFF1F120A),
         disabledInk = Color(0xFF70695F),
         disabledBg = Color(0xFF26221F),
         focusRing = Color(0xFFB5E2C1),
-        spineShadow = Color(0xFF090807), // Deep shadow for 2-column center crease in dark mode
+        spineShadow = Color(0xFF090807),
     )
 
     fun paletteFor(theme: ReaderTheme, highContrast: Boolean = false): MeridianPalette {

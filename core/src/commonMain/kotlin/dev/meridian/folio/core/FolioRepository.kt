@@ -18,6 +18,12 @@ class FolioRepository(
 
     private val _state = MutableStateFlow(loadInitialState())
     val state: StateFlow<FolioPersistedState> = _state.asStateFlow()
+    val library = LibraryManager(this)
+
+    internal fun updateLibrary(transform: (FolioPersistedState) -> FolioPersistedState) {
+        _state.update(transform)
+        saveCurrentState()
+    }
 
     private fun loadInitialState(): FolioPersistedState {
         if (persistToDisk) {
@@ -26,7 +32,7 @@ class FolioRepository(
                 val decoded = runCatching {
                     json.decodeFromString<FolioPersistedState>(bytes.decodeToString())
                 }.getOrNull()
-                if (decoded != null && decoded.documents.isNotEmpty()) {
+                if (decoded != null) {
                     var anyUpgraded = false
                     val upgradedDocs = decoded.documents.map { doc ->
                         if (doc.parserVersion < 4) {
@@ -86,10 +92,11 @@ class FolioRepository(
 
     private fun saveCurrentState() {
         if (!persistToDisk) return
-        val current = _state.value
-        runCatching {
-            val encoded = json.encodeToString(FolioPersistedState.serializer(), current)
-            PlatformFileAndZipIo.writeFileBytes(storageFilePath, encoded.encodeToByteArray())
+        PlatformLibraryIo.stateWrite {
+            runCatching {
+                val encoded = json.encodeToString(FolioPersistedState.serializer(), _state.value)
+                PlatformFileAndZipIo.writeFileBytes(storageFilePath, encoded.encodeToByteArray())
+            }
         }
     }
 
@@ -819,22 +826,7 @@ class FolioRepository(
     }
 
     fun importDocumentFromFile(path: String): BookDocument? {
-        val bytes = PlatformFileAndZipIo.readFileBytes(path) ?: return null
-        val fileName = path.substringAfterLast('\\').substringAfterLast('/')
-        val doc = DocumentCodec.importFromBytes(
-            fileName = fileName,
-            bytes = bytes,
-            filePath = path,
-        )
-        _state.update { current ->
-            val filtered = current.documents.filterNot { it.filePath == path || it.id == doc.id }
-            current.copy(
-                documents = listOf(doc) + filtered,
-                selectedBookId = doc.id,
-            )
-        }
-        saveCurrentState()
-        return doc
+        return runCatching { library.importFile(path, select = true) }.getOrNull()
     }
 
     fun exportDocumentToFile(bookId: String, targetPath: String): Boolean {

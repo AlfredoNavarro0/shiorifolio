@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,12 +51,16 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -109,6 +114,9 @@ import dev.meridian.folio.core.UiAppearanceSettings
 import dev.meridian.folio.core.UiFontFamilyOption
 import dev.meridian.folio.core.UiFontWeightOption
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -116,7 +124,7 @@ import kotlin.math.roundToInt
 private val LocalTextFieldFocusTracker = compositionLocalOf<(Boolean) -> Unit> { {} }
 
 @Composable
-private fun Modifier.shioriTextFieldFocusGuard(): Modifier {
+internal fun Modifier.shioriTextFieldFocusGuard(): Modifier {
     val tracker = LocalTextFieldFocusTracker.current
     var wasFocused by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
@@ -135,10 +143,8 @@ private fun Modifier.shioriTextFieldFocusGuard(): Modifier {
 
 enum class MeridianSection(val title: String, val stitchTabTitle: String) {
     READER("Reader", "Reader"),
-    LIBRARY("Library & Export", "Archive"),
+    LIBRARY("Biblioteca", "Biblioteca"),
     LEXICON("Saved Words & Phrases", "Notebook"),
-    EDITOR("PDF / EPUB Editor", "Typography & Editor"),
-    PREDICTION("Reading Pace & Prediction", "Telemetry"),
     SETTINGS("Settings & Shortcuts", "Ajustes"),
 }
 
@@ -149,8 +155,11 @@ fun MeridianFolioApp(
     onPickFileToExport: ((defaultFileName: String, onPathSelected: (String) -> Unit) -> Unit)? = null,
     isWindowFullscreen: Boolean = false,
     onToggleWindowFullscreen: (() -> Unit)? = null,
+    onPickFolder: (((String) -> Unit) -> Unit)? = null,
 ) {
     val state by repository.state.collectAsState()
+    val importScope = rememberCoroutineScope()
+    LibraryFolderEffects(repository)
     val uiAppearance = state.uiAppearance
     val bookTypography = state.bookTypography
     val palette = MeridianDesign.paletteFor(state.theme, uiAppearance.highContrastText)
@@ -175,6 +184,8 @@ fun MeridianFolioApp(
 
     // Tracks whether any OutlinedTextField currently holds keyboard focus so reading shortcuts never fire while typing
     var focusedTextFieldCount by remember { mutableStateOf(0) }
+    val shortcutFocusRequester = remember { FocusRequester() }
+    val readerPagination = remember(currentBook?.id, state.viewMode) { ReaderPagination() }
     // Tracks which ReaderAction is currently waiting for a new key press in Settings -> Shortcuts
     var rebindingAction by remember { mutableStateOf<ReaderAction?>(null) }
 
@@ -196,17 +207,19 @@ fun MeridianFolioApp(
 
     CompositionLocalProvider(
         LocalDensity provides scaledDensity,
+        LocalReaderPagination provides readerPagination,
+        LocalModernUiAppearance provides uiAppearance,
         LocalTextFieldFocusTracker provides { gained ->
             focusedTextFieldCount = (focusedTextFieldCount + if (gained) 1 else -1).coerceAtLeast(0)
         },
     ) {
         MaterialTheme(colorScheme = materialColorScheme) {
             if (currentBook == null) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(palette.paper),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("No documents in library.", color = palette.ink)
+                Box(Modifier.fillMaxSize().testTag("meridian_root")) {
+                    LibraryWorkspace(repository, palette,
+                        onOpenBook = { repository.selectBook(it); activeSection = MeridianSection.READER },
+                        onCreated = { activeSection = MeridianSection.READER },
+                        onPickFolder = onPickFolder, onPickFile = onPickFileToImport, onPickExport = onPickFileToExport)
                 }
                 return@MaterialTheme
             }
@@ -223,12 +236,16 @@ fun MeridianFolioApp(
             val onOpenFileDialog: (() -> Unit)? = if (onPickFileToImport != null) {
                 {
                     onPickFileToImport { picked ->
-                        val imported = repository.importDocumentFromFile(picked)
-                        if (imported != null) {
-                            activeSection = MeridianSection.READER
-                            statusBannerMessage = "Opened \"${imported.title}\" (${imported.totalPages} pages)."
-                        } else {
-                            statusBannerMessage = "Could not load file: $picked"
+                        importScope.launch {
+                            val imported = withContext(dev.meridian.folio.core.PlatformLibraryIo.ioDispatcher) {
+                                repository.importDocumentFromFile(picked)
+                            }
+                            if (imported != null) {
+                                activeSection = MeridianSection.READER
+                                statusBannerMessage = "Abierto: ${imported.title} (${imported.totalPages} páginas)."
+                            } else {
+                                statusBannerMessage = "No se pudo leer el archivo: $picked"
+                            }
                         }
                     }
                 }
@@ -262,6 +279,19 @@ fun MeridianFolioApp(
 
             val bindingFor: (ReaderAction) -> KeyBindingSpec = { action ->
                 state.keyBindings[action] ?: action.defaultSpec
+            }
+
+            // Key events need a focused target inside this subtree, even before the first click.
+            // Restore it when navigation or dismissing controls removes the previously focused node.
+            // Do not key this effect on page/timer updates: typing and keyboard traversal keep focus.
+            LaunchedEffect(currentBook.id, activeSection, isZenControlsHidden, forceMobileKindleLayout,
+                showReminderEditor, showQuickMarkBar) {
+                if (!showReminderEditor && !showQuickMarkBar) {
+                    // Lazy content can dispose its focused search field after this effect starts.
+                    // Wait for its guard to unregister instead of skipping focus restoration forever.
+                    snapshotFlow { focusedTextFieldCount }.first { it == 0 }
+                    shortcutFocusRequester.requestFocus()
+                }
             }
 
             BoxWithConstraints(
@@ -365,17 +395,19 @@ fun MeridianFolioApp(
                                 (unadorned && (event.key == Key.DirectionLeft || event.key == Key.DirectionUp || event.key == Key.PageUp))
 
                             if (isNext) {
-                                repository.goToPage(currentBook.id, (currentBook.currentPage + step).coerceAtMost(currentBook.totalPages))
+                                readerPagination.turn(currentBook, step, 1) { repository.goToPage(currentBook.id, it) }
                                 return@onPreviewKeyEvent true
                             }
                             if (isPrev) {
-                                repository.goToPage(currentBook.id, (currentBook.currentPage - step).coerceAtLeast(1))
+                                readerPagination.turn(currentBook, step, -1) { repository.goToPage(currentBook.id, it) }
                                 return@onPreviewKeyEvent true
                             }
                         }
 
                         false
                     }
+                    .focusRequester(shortcutFocusRequester)
+                    .focusable()
                     .testTag("meridian_root"),
             ) {
                 val isMobileKindleView = forceMobileKindleLayout ?: (maxWidth < 700.dp)
@@ -670,30 +702,7 @@ fun MeridianFolioApp(
                                         )
                                         statusBannerMessage = "Página ${currentBook.currentPage} marcada con la cinta Shiori (栞)."
                                     },
-                                    onSwitchToEditor = { activeSection = MeridianSection.EDITOR },
                                     onOpenNotebook = { activeSection = MeridianSection.LEXICON },
-                                )
-
-                                MeridianSection.EDITOR -> DocumentEditorWorkspaceView(
-                                    palette = palette,
-                                    book = currentBook,
-                                    onUpdatePage = { pageNo, chapterTitle, blocks ->
-                                        repository.updatePageContent(currentBook.id, pageNo, chapterTitle, blocks)
-                                        statusBannerMessage = "Cambios guardados en pág. $pageNo · Predicción recalculada."
-                                    },
-                                    onUpdateMetadata = { title, subtitle, author, format ->
-                                        repository.updateDocumentMetadata(currentBook.id, title, subtitle, author, format)
-                                        statusBannerMessage = "Metadatos actualizados ($title · ${format.label})."
-                                    },
-                                    onAddPage = { afterPage, title ->
-                                        repository.addNewPage(currentBook.id, afterPage, title)
-                                        statusBannerMessage = "Nueva página insertada después de pág. $afterPage."
-                                    },
-                                    onDeletePage = { pageNo ->
-                                        repository.deletePage(currentBook.id, pageNo)
-                                        statusBannerMessage = "Página $pageNo eliminada."
-                                    },
-                                    onPageChange = { repository.goToPage(currentBook.id, it) },
                                 )
 
                                 MeridianSection.LEXICON -> SavedPhrasesVaultView(
@@ -719,62 +728,19 @@ fun MeridianFolioApp(
                                     onDeletePhrase = { repository.deleteSavedPhrase(it) },
                                 )
 
-                                MeridianSection.PREDICTION -> ReadingAnalyticsAndPredictionView(
+                                MeridianSection.LIBRARY -> LibraryWorkspace(
+                                    repository = repository,
                                     palette = palette,
-                                    book = currentBook,
-                                    telemetry = bookTelemetry,
-                                    prediction = prediction,
-                                    onSimulateReadingBurst = { seconds ->
-                                        repository.recordReadingTimeTick(currentBook.id, seconds)
-                                        statusBannerMessage = "Muestra de +${seconds.toInt()}s registrada — predicción recalculada."
-                                    },
-                                    onJumpToPage = { pageNo ->
-                                        repository.jumpToLocation(currentBook.id, pageNo, "Telemetría pág. $pageNo")
+                                    onOpenBook = { bookId ->
+                                        val target = repository.state.value.documents.find { it.id == bookId }
+                                        if (target != null) repository.jumpToLocation(bookId, target.currentPage, "Biblioteca")
                                         activeSection = MeridianSection.READER
                                     },
+                                    onCreated = { activeSection = MeridianSection.READER },
+                                    onPickFolder = onPickFolder,
+                                    onPickFile = onPickFileToImport,
+                                    onPickExport = onPickFileToExport,
                                 )
-
-                                MeridianSection.LIBRARY -> LibraryAndFileIoView(
-                                    palette = palette,
-                                    documents = state.documents,
-                                    selectedBookId = currentBook.id,
-                                    reminders = state.reminders,
-                                    telemetryMap = state.telemetry,
-                                    onSelectBook = { bookId ->
-                                        val targetDoc = state.documents.find { it.id == bookId }
-                                        if (targetDoc != null) {
-                                            repository.jumpToLocation(bookId, targetDoc.currentPage, "Libro: ${targetDoc.title}")
-                                        } else {
-                                            repository.selectBook(bookId)
-                                        }
-                                        activeSection = MeridianSection.READER
-                                    },
-                                    onCreateDocument = { title, author, format ->
-                                        val created = repository.createNewDocument(title, author, format)
-                                        statusBannerMessage = "Nuevo ${format.label} creado: \"${created.title}\"."
-                                        activeSection = MeridianSection.EDITOR
-                                    },
-                                    onImportFromPath = { path ->
-                                        val imported = repository.importDocumentFromFile(path)
-                                        if (imported != null) {
-                                            statusBannerMessage = "Importado \"${imported.title}\" (${imported.totalPages} páginas)."
-                                            activeSection = MeridianSection.READER
-                                        } else {
-                                            statusBannerMessage = "No se pudo leer el archivo: $path"
-                                        }
-                                    },
-                                    onExportToPath = { bookId, targetPath ->
-                                        val ok = repository.exportDocumentToFile(bookId, targetPath)
-                                        statusBannerMessage = if (ok) {
-                                            "Documento exportado a $targetPath"
-                                        } else {
-                                            "Error al exportar a $targetPath"
-                                        }
-                                    },
-                                    onPickFileToImport = onPickFileToImport,
-                                    onPickFileToExport = onPickFileToExport,
-                                )
-
                                 MeridianSection.SETTINGS -> SettingsAndShortcutsWorkspaceView(
                                     palette = palette,
                                     theme = state.theme,
@@ -815,25 +781,7 @@ fun MeridianFolioApp(
                             }
                         }
 
-                        // 5. STITCH BOTTOM STATUS STREAM BAR
-                        if (!isZenControlsHidden) {
-                            val currentPageObj = currentBook.pages.find { it.pageNumber == currentBook.currentPage } ?: currentBook.pages.first()
-                            StitchDesktopStatusStreamBar(
-                                palette = palette,
-                                book = currentBook,
-                                currentChapter = currentPageObj.chapterTitle,
-                                prediction = prediction,
-                                isTimerRunning = isTimerRunning,
-                                onPrevPage = {
-                                    val step = if (state.viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
-                                    repository.goToPage(currentBook.id, (currentBook.currentPage - step).coerceAtLeast(1))
-                                },
-                                onNextPage = {
-                                    val step = if (state.viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
-                                    repository.goToPage(currentBook.id, (currentBook.currentPage + step).coerceAtMost(currentBook.totalPages))
-                                },
-                            )
-                        }
+
                     }
                 }
             }
@@ -878,8 +826,6 @@ private fun StitchDesktopTopNavigationBar(
 ) {
     var showTypographyPopover by remember { mutableStateOf(false) }
     val uiFontFamily = uiAppearance.fontFamily.toComposeFontFamily()
-    val uiBaseWeight = uiAppearance.fontWeight.toComposeFontWeight()
-    val tabFontSize = (uiAppearance.fontSizeSp - 0.5f).coerceIn(11f, 15f).sp
     val isPdfOriginalMode = currentBook.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
 
     Column(
@@ -887,292 +833,21 @@ private fun StitchDesktopTopNavigationBar(
             .fillMaxWidth()
             .background(palette.paper.copy(alpha = 0.96f)),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Left: Brand Logo + "shiorifolio" + Compact Book Pill
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f, fill = false),
-            ) {
-                MeridianCompassMark(
-                    inkColor = palette.accentGreen,
-                    paperColor = palette.paper,
-                    size = 24.dp,
-                )
-                Column {
-                    Text(
-                        text = "shiorifolio",
-                        color = palette.ink,
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp,
-                        letterSpacing = (-0.4).sp,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    Text(
-                        text = "ARCHIVE & PRESS · 栞",
-                        color = palette.muted,
-                        fontFamily = uiFontFamily,
-                        fontSize = 7.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.8.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
+        ModernAppNavigation(palette, activeSection, theme, onSelectSection, onToggleTheme)
+        if (activeSection == MeridianSection.READER) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ModernChromeAction("Aa  Apariencia", palette, "top_typography_popover_btn", showTypographyPopover) {
+                    showTypographyPopover = !showTypographyPopover
                 }
-
-                Box(
-                    modifier = Modifier
-                        .height(18.dp)
-                        .width(1.dp)
-                        .background(palette.border),
-                )
-
-                // Current Book Format Badge + Page Counter
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                    ) {
-                        Text(
-                            text = currentBook.format.name,
-                            color = palette.accentGreen,
-                            fontSize = 8.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
-                    }
-                    Text(
-                        text = "p.${currentBook.currentPage}/${currentBook.totalPages}",
-                        color = palette.muted,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.5.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                }
-            }
-
-            // Center: Section Navigation Tabs (Crisp UI typography — eliminates small-serif pixelation on Windows/Linux)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.padding(horizontal = 4.dp),
-            ) {
-                MeridianSection.entries.forEach { section ->
-                    val isSelected = section == activeSection
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) palette.pillBg.copy(alpha = 0.85f) else Color.Transparent)
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) {
-                                onSelectSection(section)
-                            }
-                            .padding(vertical = 3.dp, horizontal = 5.dp)
-                            .testTag("section_tab_${section.name}"),
-                    ) {
-                        Text(
-                            text = section.stitchTabTitle,
-                            color = if (isSelected) palette.ink else palette.inkSoft,
-                            fontFamily = uiFontFamily,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else uiBaseWeight,
-                            fontSize = tabFontSize,
-                            letterSpacing = 0.1.sp,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .height(2.dp)
-                                .width(if (isSelected) 22.dp else 0.dp)
-                                .background(palette.accentGreen),
-                        )
-                    }
-                }
-            }
-
-            // Right: Action Controls (Open File, Typography A±, Bookmark Ribbon, Mark Phrase, Theme, Kindle Mobile Switch, Zen Mode, Fullscreen)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (onOpenFileDialog != null) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(palette.accentGreen)
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onOpenFileDialog() }
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text = "Abrir",
-                            color = palette.onAccent,
-                            fontFamily = uiFontFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                        )
-                    }
-                }
-
-                // Format Size / Typography Quick Popover Trigger
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (showTypographyPopover) palette.ink else palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) {
-                            showTypographyPopover = !showTypographyPopover
-                        }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("top_typography_popover_btn"),
-                ) {
-                    Text(
-                        text = if (isPdfOriginalMode) "Aa PDF" else "Aa ${fontSizePt.toInt()}pt",
-                        color = if (showTypographyPopover) palette.paper else palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-
-                // Bookmark Reminder Toggle
-                val hasReminder = activeReminder != null
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (hasReminder) palette.warningAmber.copy(alpha = 0.20f) else palette.pillBg)
-                        .border(1.dp, if (hasReminder) palette.warningAmber else palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleReminderEditor() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("open_reminder_btn"),
-                ) {
-                    Text(
-                        text = "栞 Marcapáginas",
-                        color = if (hasReminder) palette.warningAmber else palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-
-                // Mark Phrase Quick Bar Toggle
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleQuickMark() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("open_mark_phrase_btn"),
-                ) {
-                    Text(
-                        text = "+ Frase",
-                        color = palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                    )
-                }
-
-                // White / Dark Theme Toggle (preserves testTag("theme_toggle_button"))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(palette.elevatedSurface)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleTheme() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("theme_toggle_button"),
-                ) {
-                    Text(
-                        text = "◐ ${theme.stitchLabel}",
-                        color = palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-
-                // Mobile Kindle View Preview Toggle
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isMobileOverride) palette.accentGreen else palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleMobilePreview() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
-                ) {
-                    Text(
-                        text = "📱 Móvil",
-                        color = if (isMobileOverride) palette.onAccent else palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                    )
-                }
-
-                // Zen Mode Toggle (Hides Controls so pages fill reading area)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isZenControlsHidden) palette.accentGreen else palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleZenControls() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("zen_mode_toggle_btn"),
-                ) {
-                    Text(
-                        text = "🧘 Zen",
-                        color = if (isZenControlsHidden) palette.onAccent else palette.ink,
-                        fontFamily = uiFontFamily,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-
-                // Separate OS Window Fullscreen Toggle
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isFullscreen) palette.accentGreen else palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                        .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onToggleFullscreen() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .testTag("fullscreen_toggle_btn"),
-                ) {
-                    Text(
-                        text = if (isFullscreen) "🗗" else "⛶",
-                        color = if (isFullscreen) palette.onAccent else palette.ink,
-                        fontSize = 10.5.sp,
-                        maxLines = 1,
-                    )
-                }
+                ModernChromeAction("Marcapáginas", palette, "open_reminder_btn", activeReminder != null, onClick = onToggleReminderEditor)
+                ModernChromeAction("+ Frase", palette, "open_mark_phrase_btn", onClick = onToggleQuickMark)
+                ModernChromeAction("Enfoque", palette, "zen_mode_toggle_btn", onClick = onToggleZenControls)
+                ModernChromeAction("⛶  Pantalla completa", palette, "fullscreen_toggle_btn", isFullscreen, onClick = onToggleFullscreen)
+                ModernChromeAction("Vista móvil", palette, "mobile_preview_toggle", isMobileOverride, onClick = onToggleMobilePreview)
+                if (onOpenFileDialog != null) ModernChromeAction("Abrir archivo", palette, "reader_open_file", onClick = onOpenFileDialog)
             }
         }
-
         // Expandable Quick Typography & Screen Tone Strip (when "Aa" button clicked in header)
         AnimatedVisibility(visible = showTypographyPopover) {
             Surface(
@@ -1419,9 +1094,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
     onToggleFullscreen: () -> Unit,
     onQuickSavePhrase: (phrase: String, context: String) -> Unit,
     onSetReminderHere: () -> Unit,
-    onSwitchToEditor: () -> Unit,
     onOpenNotebook: () -> Unit,
 ) {
+    val pagination = LocalReaderPagination.current
     val currentPageObj = book.pages.find { it.pageNumber == book.currentPage } ?: book.pages.first()
     val secondPageObj = if (viewMode == PageViewMode.TWO_COLUMNS && book.currentPage < book.totalPages) {
         book.pages.find { it.pageNumber == book.currentPage + 1 }
@@ -1436,198 +1111,20 @@ private fun StitchDesktopReaderSpreadWorkspace(
             .fillMaxSize()
             .background(palette.paper)
             .padding(
-                horizontal = if (isZenControlsHidden) 14.dp else 28.dp,
-                vertical = if (isZenControlsHidden) 10.dp else 8.dp,
+                horizontal = if (isZenControlsHidden) 14.dp else 24.dp,
+                vertical = if (isZenControlsHidden) 10.dp else 16.dp,
             ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 2A. AUXILIARY ARCHIVAL UTILITY BAR (Hidden in Zen Mode so pages fill the workspace)
         if (!isZenControlsHidden) {
-            Row(
-                modifier = Modifier
-                    .widthIn(max = 1240.dp)
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // Navigation History (Back / Forward) — distinct from normal sequential page turning
-                    val canBack = backHistoryTop != null
-                    val canForward = forwardHistoryTop != null
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(if (canBack) palette.pillBg else palette.disabledBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(5.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp), enabled = canBack) {
-                                    onNavigateBack()
-                                }
-                                .padding(horizontal = 7.dp, vertical = 2.dp)
-                                .testTag("nav_history_back_btn"),
-                        ) {
-                            Text(
-                                text = if (backHistoryTop != null) "↩ Volver (p.${backHistoryTop.pageNumber})" else "↩ Atrás",
-                                color = if (canBack) palette.ink else palette.disabledInk,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(if (canForward) palette.pillBg else palette.disabledBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(5.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp), enabled = canForward) {
-                                    onNavigateForward()
-                                }
-                                .padding(horizontal = 7.dp, vertical = 2.dp)
-                                .testTag("nav_history_forward_btn"),
-                        ) {
-                            Text(
-                                text = "↪",
-                                color = if (canForward) palette.ink else palette.disabledInk,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-
-                    Text("•", color = palette.border, fontSize = 10.sp)
-                    Text(
-                        text = currentBookAuthorSubtitle(book),
-                        color = palette.inkSoft,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Serif,
-                        fontStyle = FontStyle.Italic,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (tocEntries.size > 1) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(if (showTocBar) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(5.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) { showTocBar = !showTocBar }
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                                .testTag("toc_toggle_btn"),
-                        ) {
-                            Text(
-                                text = if (showTocBar) "Ocultar Capítulos (${tocEntries.size})" else "Capítulos (${tocEntries.size})",
-                                color = if (showTocBar) palette.onAccent else palette.ink,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ZoomAndFitControlStrip(
-                        palette = palette,
-                        fitMode = fitMode,
-                        zoomScale = zoomScale,
-                        onSelectFitMode = onSelectFitMode,
-                        onChangeZoomScale = onChangeZoomScale,
-                    )
-
-                    if (book.format == DocumentFormat.PDF) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        ) {
-                            Text("PDF:", color = palette.muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            PdfPageColorMode.entries.forEach { pdfMode ->
-                                val sel = pdfMode == pdfPageColorMode
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (sel) palette.accentGreen else Color.Transparent)
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(4.dp)) {
-                                            onSelectPdfColorMode(pdfMode)
-                                        }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                ) {
-                                    Text(
-                                        text = pdfMode.shortLabel,
-                                        color = if (sel) palette.onAccent else palette.inkSoft,
-                                        fontSize = 10.sp,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Annotated passages pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onOpenNotebook() }
-                            .padding(horizontal = 10.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = "✎ ${savedPhrases.size} pasajes anotados",
-                            color = palette.inkSoft,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-
-                    // Total pages pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 10.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = "▤ ${book.totalPages} páginas",
-                            color = palette.inkSoft,
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
-
-                    // Quick Edit Page trigger
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) { onSwitchToEditor() }
-                            .padding(horizontal = 10.dp, vertical = 3.dp),
-                    ) {
-                        Text(
-                            text = "Editar Folio",
-                            color = palette.accentGreen,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
+            ModernReaderToolbar(
+                palette, book, backHistoryTop, forwardHistoryTop, showTocBar, savedPhrases.size,
+                fitMode, zoomScale, pdfPageColorMode, onNavigateBack, onNavigateForward,
+                { showTocBar = !showTocBar }, onOpenNotebook,
+                onSelectFitMode, onChangeZoomScale, onSelectPdfColorMode,
+            )
         }
-
         // Optional Expandable Chapter TOC Jump Strip (records jump in Navigation History)
         if (!isZenControlsHidden && showTocBar && tocEntries.isNotEmpty()) {
             Row(
@@ -1692,7 +1189,10 @@ private fun StitchDesktopReaderSpreadWorkspace(
             modifier = Modifier
                 .weight(1f)
                 .widthIn(max = maxSpreadWidth)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .then(if (viewMode == PageViewMode.VERTICAL_CONTINUOUS) Modifier else Modifier.readerPageGestures(book.id to viewMode) { direction ->
+                    pagination.turn(book, if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1, direction, onPageChange)
+                }),
             contentAlignment = Alignment.TopCenter,
         ) {
             when (viewMode) {
@@ -1704,7 +1204,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         border = BorderStroke(1.dp, palette.border),
                         modifier = Modifier
                             .fillMaxSize()
-                            .shadow(elevation = 6.dp, shape = RoundedCornerShape(14.dp)),
+                            .shadow(elevation = 1.dp, shape = RoundedCornerShape(14.dp)),
                     ) {
                         Box(
                             modifier = Modifier
@@ -1802,15 +1302,15 @@ private fun StitchDesktopReaderSpreadWorkspace(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.Center)
-                                    .width(44.dp)
+                                    .width(16.dp)
                                     .fillMaxHeight()
                                     .background(
                                         Brush.horizontalGradient(
                                             colors = listOf(
                                                 Color.Transparent,
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.36f else 0.06f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.58f else 0.13f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.36f else 0.06f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.12f else 0.02f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.18f else 0.04f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.12f else 0.02f),
                                                 Color.Transparent,
                                             ),
                                         ),
@@ -2102,14 +1602,14 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (book.currentPage > 1) palette.pillBg else palette.disabledBg)
-                                .clickable(enabled = book.currentPage > 1) {
-                                    onPageChange((book.currentPage - step).coerceAtLeast(1))
+                                .background(if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.pillBg else palette.disabledBg)
+                                .clickable(enabled = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) {
+                                    pagination.turn(book, step, -1, onPageChange)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                 .testTag("prev_page_button"),
                         ) {
-                            Text("‹ Ant.", color = if (book.currentPage > 1) palette.ink else palette.disabledInk, fontSize = 11.sp)
+                            Text("‹ Ant.", color = if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.ink else palette.disabledInk, fontSize = 11.sp)
                         }
                         Text(
                             text = "Pág. ${book.currentPage}${if (secondPageObj != null) "-${secondPageObj.pageNumber}" else ""} / ${book.totalPages}",
@@ -2121,14 +1621,14 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (book.currentPage < book.totalPages) palette.pillBg else palette.disabledBg)
-                                .clickable(enabled = book.currentPage < book.totalPages) {
-                                    onPageChange((book.currentPage + step).coerceAtMost(book.totalPages))
+                                .background(if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.pillBg else palette.disabledBg)
+                                .clickable(enabled = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) {
+                                    pagination.turn(book, step, 1, onPageChange)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                 .testTag("next_page_button"),
                         ) {
-                            Text("Sig. ›", color = if (book.currentPage < book.totalPages) palette.ink else palette.disabledInk, fontSize = 11.sp)
+                            Text("Sig. ›", color = if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.ink else palette.disabledInk, fontSize = 11.sp)
                         }
                         Box(
                             modifier = Modifier
@@ -2316,18 +1816,18 @@ internal fun StitchBookSpreadLeaf(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (isLeftLeaf) book.title.uppercase() else page.chapterTitle.uppercase(),
+                    text = if (isLeftLeaf) book.title else page.chapterTitle,
                     color = palette.muted,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.6.sp,
+                    letterSpacing = 0.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "FOLIO ${page.pageNumber}",
+                    text = "${page.pageNumber}",
                     color = palette.muted,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
@@ -2374,191 +1874,12 @@ internal fun StitchBookSpreadLeaf(
                 )
             }
         } else {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-            ) {
-                val maxEmbeddedImageHeight = (maxHeight * 0.90f).coerceAtLeast(480.dp)
-                SelectionContainer {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = if (stretchVertically) {
-                            Arrangement.SpaceBetween
-                        } else {
-                            Arrangement.spacedBy(bookTypography.paragraphSpacingDp.coerceIn(4f, 28f).dp)
-                        },
-                    ) {
-                        page.blocks.forEachIndexed { idx, block ->
-                            val imagePath = block.imagePath
-                            if (block.style == BlockStyle.IMAGE && imagePath != null) {
-                                val bmp = rememberLoadedImageBitmap(
-                                    path = imagePath,
-                                    bookFilePath = book.filePath,
-                                    bookId = book.id,
-                                    pageNumber = page.pageNumber,
-                                )
-                                if (bmp != null) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                    ) {
-                                        Image(
-                                            bitmap = bmp,
-                                            contentDescription = block.text.ifBlank { "Book Illustration" },
-                                            contentScale = ContentScale.Fit,
-                                            colorFilter = pdfColorFilter,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 260.dp, max = maxEmbeddedImageHeight)
-                                                .clip(RoundedCornerShape(6.dp)),
-                                        )
-                                        val cleanCaption = block.text.trim()
-                                        if (cleanCaption.isNotBlank() && !cleanCaption.matches(Regex("""Page\s+\d+\s+Illustration""", RegexOption.IGNORE_CASE))) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = cleanCaption,
-                                                color = palette.muted,
-                                                fontSize = 11.sp,
-                                                fontStyle = FontStyle.Italic,
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                val annotated = remember(block.text, pagePhrases, palette.isDark) {
-                                    buildHighlightedAnnotatedString(block.text, pagePhrases, palette)
-                                }
-
-                                Column {
-                                    when (block.style) {
-                                        BlockStyle.HEADING -> {
-                                            Column(modifier = Modifier.padding(bottom = 4.dp)) {
-                                                Text(
-                                                    text = "CAPÍTULO · FOLIO ${page.pageNumber}",
-                                                    color = palette.warningAmber,
-                                                    fontSize = 9.5.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    letterSpacing = 2.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Text(
-                                                    text = annotated,
-                                                    color = palette.ink,
-                                                    fontFamily = contentFontFamily,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    fontSize = (fontSizeSp + 4.5f).sp,
-                                                    lineHeight = (lineHeightSp + 4f).sp,
-                                                )
-                                            }
-                                        }
-
-                                        BlockStyle.QUOTE -> {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(2.5.dp)
-                                                        .height(46.dp)
-                                                        .background(palette.warningAmber),
-                                                )
-                                                Spacer(modifier = Modifier.width(14.dp))
-                                                Text(
-                                                    text = annotated,
-                                                    color = palette.inkSoft,
-                                                    fontFamily = contentFontFamily,
-                                                    fontStyle = FontStyle.Italic,
-                                                    fontSize = fontSizeSp.sp,
-                                                    lineHeight = lineHeightSp.sp,
-                                                    textAlign = contentTextAlign,
-                                                )
-                                            }
-                                        }
-
-                                        BlockStyle.CALLOUT -> {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(palette.elevatedSurface)
-                                                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                                    .padding(12.dp),
-                                            ) {
-                                                Text(
-                                                    text = annotated,
-                                                    color = palette.ink,
-                                                    fontFamily = contentFontFamily,
-                                                    fontSize = (fontSizeSp - 1.5f).sp,
-                                                    lineHeight = (lineHeightSp - 3f).sp,
-                                                    textAlign = contentTextAlign,
-                                                )
-                                            }
-                                        }
-
-                                        BlockStyle.PARAGRAPH, BlockStyle.IMAGE -> {
-                                            Text(
-                                                text = annotated,
-                                                color = palette.ink,
-                                                fontFamily = contentFontFamily,
-                                                fontSize = fontSizeSp.sp,
-                                                lineHeight = lineHeightSp.sp,
-                                                textAlign = contentTextAlign,
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        }
-                                    }
-
-                                    // Interactive Notable Phrase Chips for one-click marking
-                                    val candidatePhrases = remember(block.text) {
-                                        extractCandidatePhrases(block.text)
-                                    }
-                                    if (candidatePhrases.isNotEmpty() && block.style != BlockStyle.HEADING && block.text.length >= 50 && idx < 4) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            candidatePhrases.forEach { candidate ->
-                                                val alreadySaved = pagePhrases.any {
-                                                    it.phrase.equals(candidate, ignoreCase = true)
-                                                }
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(
-                                                            if (alreadySaved) {
-                                                                palette.highlightColor(HighlightTone.SAGE)
-                                                            } else {
-                                                                palette.pillBg.copy(alpha = 0.7f)
-                                                            },
-                                                        )
-                                                        .clickable { onQuickSavePhrase(candidate, block.text) }
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                                ) {
-                                                    Text(
-                                                        text = if (alreadySaved) "✓ $candidate" else "+ $candidate",
-                                                        color = palette.inkSoft,
-                                                        fontSize = 9.5.sp,
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            PagedBookBody(
+                palette, pdfPageColorMode, book, page, pagePhrases, fontSizeSp, lineHeightSp,
+                bookTypography, onQuickSavePhrase,
+                Modifier.weight(1f).fillMaxWidth().padding(vertical = 10.dp),
+            )
         }
-
         // 3. Archival Folio Footer ("Folio • M-01" and page number)
         Column(modifier = Modifier.fillMaxWidth()) {
             HorizontalDivider(color = palette.border.copy(alpha = 0.65f), thickness = 1.dp)
@@ -2632,17 +1953,18 @@ private fun StitchFloatingCommandDock(
     onUpdateBookTypography: ((BookTypographySettings) -> BookTypographySettings) -> Unit,
     onToggleTimer: () -> Unit,
 ) {
+    val pagination = LocalReaderPagination.current
     val step = if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
     val isPdfOriginalMode = book.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
 
     Surface(
-        color = palette.paper.copy(alpha = 0.96f),
-        shape = RoundedCornerShape(16.dp),
+        color = palette.pageSurface,
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, palette.border),
         modifier = Modifier
-            .widthIn(max = 980.dp)
+            .widthIn(max = 1240.dp)
             .fillMaxWidth()
-            .shadow(elevation = 8.dp, shape = RoundedCornerShape(16.dp)),
+            .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -2655,20 +1977,20 @@ private fun StitchFloatingCommandDock(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // Prev / Counter / Next
-                val canGoPrev = book.currentPage > 1
-                val canGoNext = book.currentPage < book.totalPages
+                val canGoPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)
+                val canGoNext = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (canGoPrev) palette.pillBg else palette.disabledBg)
                             .border(1.dp, palette.border, RoundedCornerShape(8.dp))
                             .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoPrev) {
-                                onPageChange((book.currentPage - step).coerceAtLeast(1))
+                                pagination.turn(book, step, -1, onPageChange)
                             }
                             .testTag("prev_page_button"),
                         contentAlignment = Alignment.Center,
@@ -2697,12 +2019,12 @@ private fun StitchFloatingCommandDock(
 
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (canGoNext) palette.pillBg else palette.disabledBg)
                             .border(1.dp, palette.border, RoundedCornerShape(8.dp))
                             .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoNext) {
-                                onPageChange((book.currentPage + step).coerceAtMost(book.totalPages))
+                                pagination.turn(book, step, 1, onPageChange)
                             }
                             .testTag("next_page_button"),
                         contentAlignment = Alignment.Center,
@@ -2726,7 +2048,7 @@ private fun StitchFloatingCommandDock(
                         text = "${(prediction.completionFraction * 100).roundToInt()}%",
                         color = palette.muted,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                     )
                     Slider(
                         value = book.currentPage.toFloat(),
@@ -2747,7 +2069,7 @@ private fun StitchFloatingCommandDock(
                         text = "100%",
                         color = palette.muted,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                     )
                 }
 
@@ -2767,11 +2089,11 @@ private fun StitchFloatingCommandDock(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (isTimerRunning) Color(0xFF10B981) else palette.muted)
+                            .background(if (isTimerRunning) palette.accentGreen else palette.muted)
                             .testTag("reading_timer_toggle"),
                     )
                     Text(
-                        text = "Ritmo: ${prediction.formattedRemainingTime()} • ${prediction.estimatedSecondsPerPage.toInt()}s/pág (${prediction.estimatedWordsPerMinute.toInt()} WPM)",
+                        text = "${prediction.formattedRemainingTime()} restantes",
                         color = palette.ink,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
@@ -2820,7 +2142,7 @@ private fun StitchFloatingCommandDock(
                             Text(
                                 text = mode.stitchLabel,
                                 color = if (selected) palette.onAccent else palette.inkSoft,
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                             )
                         }
@@ -2835,7 +2157,7 @@ private fun StitchFloatingCommandDock(
                     Text(
                         text = "TONO",
                         color = palette.muted,
-                        fontSize = 9.5.sp,
+                        fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.2.sp,
                     )
@@ -2874,7 +2196,7 @@ private fun StitchFloatingCommandDock(
                                 text = "PDF: Vista Original",
                                 color = palette.muted,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
@@ -2911,7 +2233,7 @@ private fun StitchFloatingCommandDock(
                                 Text(
                                     text = "Vista Original PDF",
                                     color = palette.ink,
-                                    fontSize = 10.5.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
@@ -2938,7 +2260,7 @@ private fun StitchFloatingCommandDock(
                                 text = "${fontSizePt.toInt()}pt",
                                 color = palette.muted,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 4.dp),
                             )
                             Box(
@@ -2977,113 +2299,6 @@ private fun StitchFloatingCommandDock(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Stitch Desktop Status Stream Bar at the very bottom of the screen.
- */
-@Composable
-private fun StitchDesktopStatusStreamBar(
-    palette: MeridianPalette,
-    book: BookDocument,
-    currentChapter: String,
-    prediction: FinishTimePrediction,
-    isTimerRunning: Boolean,
-    onPrevPage: () -> Unit,
-    onNextPage: () -> Unit,
-) {
-    Surface(
-        color = palette.elevatedSurface,
-        border = BorderStroke(1.dp, palette.border),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(if (isTimerRunning) palette.accentGreen else palette.muted),
-                    )
-                    Text(
-                        text = "SHIORIFOLIO READING STREAM",
-                        color = palette.muted,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.2.sp,
-                    )
-                }
-                Text("|", color = palette.border, fontSize = 11.sp)
-                Text(
-                    text = "Cap.: $currentChapter",
-                    color = palette.inkSoft,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 320.dp),
-                )
-                Text("•", color = palette.border, fontSize = 11.sp)
-                Text(
-                    text = "Restante: ${prediction.formattedRemainingTime()} (Activo: ${prediction.formattedActiveTime()})",
-                    color = palette.inkSoft,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.5.sp,
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(
-                    text = "Cadencia: ${prediction.formattedWpm()} (Recálculos: #${prediction.recalculationCount})",
-                    color = palette.muted,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.5.sp,
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = "‹",
-                        color = palette.ink,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onPrevPage() }.padding(horizontal = 4.dp),
-                    )
-                    Text(
-                        text = "Pág. ${book.currentPage} de ${book.totalPages}",
-                        color = palette.ink,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 10.5.sp,
-                    )
-                    Text(
-                        text = "›",
-                        color = palette.ink,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onNextPage() }.padding(horizontal = 4.dp),
-                    )
                 }
             }
         }
@@ -3139,6 +2354,7 @@ private fun StitchMobileKindleReaderLayout(
     onOpenFileDialog: (() -> Unit)?,
     onSwitchToDesktopView: () -> Unit,
 ) {
+    val pagination = LocalReaderPagination.current
     val currentPageObj = book.pages.find { it.pageNumber == book.currentPage } ?: book.pages.first()
     val pagePhrases = remember(savedPhrases, currentPageObj.pageNumber) {
         savedPhrases.filter { it.pageNumber == currentPageObj.pageNumber }
@@ -3301,140 +2517,26 @@ private fun StitchMobileKindleReaderLayout(
                         }
                     }
                 } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                top = if (hudVisible) 76.dp else 20.dp,
-                                bottom = if (hudVisible) 110.dp else 28.dp,
-                                start = horizontalPad,
-                                end = horizontalPad,
-                            )
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        // Ornamental Chapter Header (Stitch Kindle style)
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp, bottom = 18.dp)
-                                .clickable { onToggleZenControls() },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "CAPÍTULO · FOLIO ${currentPageObj.pageNumber}",
-                                color = palette.accentGreen,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                letterSpacing = 2.2.sp,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = currentPageObj.chapterTitle,
-                                color = palette.ink,
-                                fontFamily = contentFontFamily,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 19.sp,
-                                textAlign = TextAlign.Center,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Box(modifier = Modifier.width(28.dp).height(1.dp).background(palette.border))
-                                Box(modifier = Modifier.size(5.dp).background(palette.warningAmber))
-                                Box(modifier = Modifier.width(28.dp).height(1.dp).background(palette.border))
-                            }
-                        }
-
-                        // Book Content Blocks
-                        SelectionContainer {
-                            Column(verticalArrangement = Arrangement.spacedBy(bookTypography.paragraphSpacingDp.coerceIn(4f, 28f).dp)) {
-                                currentPageObj.blocks.forEachIndexed { idx, block ->
-                                    val imagePath = block.imagePath
-                                    if (block.style == BlockStyle.IMAGE && imagePath != null) {
-                                        val bmp = rememberLoadedImageBitmap(
-                                            path = imagePath,
-                                            bookFilePath = book.filePath,
-                                            bookId = book.id,
-                                            pageNumber = currentPageObj.pageNumber,
-                                        )
-                                        if (bmp != null) {
-                                            Column(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                            ) {
-                                                Image(
-                                                    bitmap = bmp,
-                                                    contentDescription = block.text.ifBlank { "Ilustración" },
-                                                    contentScale = ContentScale.Fit,
-                                                    colorFilter = pdfColorFilter,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .heightIn(min = 240.dp, max = (viewportHeight * 0.82f).coerceAtLeast(440.dp))
-                                                        .clip(RoundedCornerShape(8.dp)),
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        val annotated = remember(block.text, pagePhrases, palette.isDark) {
-                                            buildHighlightedAnnotatedString(block.text, pagePhrases, palette)
-                                        }
-                                        Text(
-                                            text = annotated,
-                                            color = palette.ink,
-                                            fontFamily = contentFontFamily,
-                                            fontSize = effectiveFontSizePt.sp,
-                                            lineHeight = (effectiveFontSizePt * lineSpacingMultiplier).sp,
-                                            textAlign = contentTextAlign,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-
-                                        val candidatePhrases = remember(block.text) {
-                                            extractCandidatePhrases(block.text)
-                                        }
-                                        if (candidatePhrases.isNotEmpty() && idx < 3) {
-                                            FlowRow(
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                                modifier = Modifier.padding(top = 4.dp),
-                                            ) {
-                                                candidatePhrases.forEach { candidate ->
-                                                    val alreadySaved = pagePhrases.any { it.phrase.equals(candidate, ignoreCase = true) }
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(4.dp))
-                                                            .background(if (alreadySaved) palette.highlightColor(HighlightTone.SAGE) else palette.pillBg)
-                                                            .clickable { onQuickSavePhrase(candidate, block.text) }
-                                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                                    ) {
-                                                        Text(
-                                                            text = if (alreadySaved) "✓ $candidate" else "+ $candidate",
-                                                            color = palette.inkSoft,
-                                                            fontSize = 10.sp,
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
+                    PagedBookBody(
+                        palette, pdfPageColorMode, book, currentPageObj, pagePhrases,
+                        effectiveFontSizePt, effectiveFontSizePt * lineSpacingMultiplier,
+                        bookTypography, onQuickSavePhrase,
+                        Modifier.fillMaxSize().padding(
+                            top = if (hudVisible) 76.dp else 20.dp,
+                            bottom = if (hudVisible) 110.dp else 28.dp,
+                            start = horizontalPad, end = horizontalPad,
+                        ),
+                    )
                 }
             }
         }
-
         // Non-interfering narrow 24.dp edge tap zones on Android/Mobile for paginated modes (never blocks SelectionContainer or scroll)
         MobileEdgePageTurnZones(
             enabled = viewMode != PageViewMode.VERTICAL_CONTINUOUS && viewMode != PageViewMode.VERTICAL_PAGINATED,
-            canPrev = book.currentPage > 1,
-            canNext = book.currentPage < book.totalPages,
-            onPrevPage = { onPageChange((book.currentPage - 1).coerceAtLeast(1)) },
-            onNextPage = { onPageChange((book.currentPage + 1).coerceAtMost(book.totalPages)) },
+            canPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, 1, -1),
+            canNext = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, 1, 1),
+            onPrevPage = { pagination.turn(book, 1, -1, onPageChange) },
+            onNextPage = { pagination.turn(book, 1, 1, onPageChange) },
         )
 
         // Floating pill at top right when HUD is hidden in Zen Mode on Mobile/Android
@@ -4010,8 +3112,8 @@ private fun StitchMobileKindleReaderLayout(
                     border = BorderStroke(1.dp, palette.border),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val canPrev = book.currentPage > 1
-                    val canNext = book.currentPage < book.totalPages
+                    val canPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, 1, -1)
+                    val canNext = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, 1, 1)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4026,7 +3128,7 @@ private fun StitchMobileKindleReaderLayout(
                                 .background(if (canPrev) palette.pillBg else palette.disabledBg)
                                 .border(1.dp, palette.border, RoundedCornerShape(10.dp))
                                 .clickable(enabled = canPrev) {
-                                    onPageChange((book.currentPage - 1).coerceAtLeast(1))
+                                    pagination.turn(book, 1, -1, onPageChange)
                                 }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                                 .testTag("prev_page_button"),
@@ -4083,7 +3185,7 @@ private fun StitchMobileKindleReaderLayout(
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (canNext) palette.accentGreen else palette.disabledBg)
                                 .clickable(enabled = canNext) {
-                                    onPageChange((book.currentPage + 1).coerceAtMost(book.totalPages))
+                                    pagination.turn(book, 1, 1, onPageChange)
                                 }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                                 .testTag("next_page_button"),
@@ -4141,7 +3243,7 @@ private fun PageReminderBanner(
     val textFieldColors = shioriOutlinedTextFieldColors(palette)
 
     Surface(
-        color = palette.elevatedSurface,
+        color = palette.pageSurface,
         border = BorderStroke(1.dp, palette.border),
         modifier = Modifier
             .fillMaxWidth()
@@ -4155,7 +3257,7 @@ private fun PageReminderBanner(
                 }
             }
             .testTag("page_reminder_banner"),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(14.dp),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
             if (reminder != null && !showEditor) {
@@ -4176,11 +3278,11 @@ private fun PageReminderBanner(
                                 .padding(horizontal = 7.dp, vertical = 2.dp),
                         ) {
                             Text(
-                                text = "栞 MARCAPÁGINAS · PÁG. ${reminder.pageNumber}",
+                                text = "Guardado · pág. ${reminder.pageNumber}",
                                 color = palette.onWarningAmber,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp,
+                                letterSpacing = 0.sp,
                             )
                         }
                         Text(
@@ -4968,1374 +4070,6 @@ private fun SavedPhrasesVaultView(
                                 border = BorderStroke(1.dp, palette.border),
                             ) {
                                 Text("Delete", color = palette.muted, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * READING ANALYTICS & DYNAMIC FINISH-TIME PREDICTION VIEW
- */
-@Composable
-private fun ReadingAnalyticsAndPredictionView(
-    palette: MeridianPalette,
-    book: BookDocument,
-    telemetry: BookReadingTelemetry?,
-    prediction: FinishTimePrediction,
-    onSimulateReadingBurst: (Double) -> Unit,
-    onJumpToPage: (Int) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "ADAPTIVE READING TELEMETRY & DYNAMIC FINISH PREDICTION",
-                    color = palette.muted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Estimated Time Remaining: ${prediction.formattedRemainingTime()}",
-                    color = palette.ink,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 28.sp,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Active Time Tracked: ${prediction.formattedActiveTime()}  ·  Current Pace: ${prediction.formattedPacePerPage()} (${prediction.formattedWpm()})  ·  Confidence: ${prediction.confidenceLabel} (Recalculated ${prediction.recalculationCount} times)",
-                    color = palette.inkSoft,
-                    fontSize = 13.5.sp,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onSimulateReadingBurst(15.0) },
-                        colors = ButtonDefaults.buttonColors(containerColor = palette.accentGreen, contentColor = palette.onAccent),
-                    ) {
-                        Text("Simulate +15s Reading Sample (Recalculate)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    OutlinedButton(
-                        onClick = { onSimulateReadingBurst(45.0) },
-                        border = BorderStroke(1.dp, palette.border),
-                    ) {
-                        Text("Simulate +45s Deep Study Sample", color = palette.ink, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "PAGE-BY-PAGE TRACKING LEDGER (${book.title})",
-                    color = palette.ink,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                book.pages.take(60).forEach { p ->
-                    val stat = telemetry?.pagesVisited?.get(p.pageNumber)
-                    val spent = stat?.secondsSpent ?: 0.0
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Page ${p.pageNumber}: ${p.chapterTitle}",
-                                color = palette.ink,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.5.sp,
-                            )
-                            Text(
-                                text = "${p.wordCount} words · Visited ${stat?.visitCount ?: 0} time(s) · Time tracked: ${
-                                    FinishTimePrediction.formatDurationSeconds(spent)
-                                }",
-                                color = palette.inkSoft,
-                                fontSize = 12.sp,
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { onJumpToPage(p.pageNumber) },
-                            border = BorderStroke(1.dp, palette.border),
-                        ) {
-                            Text("Read Page ${p.pageNumber}", color = palette.ink, fontSize = 12.sp)
-                        }
-                    }
-                    HorizontalDivider(color = palette.border)
-                }
-            }
-        }
-    }
-}
-
-/**
- * LIBRARY & FILE IMPORT / EXPORT VIEW
- */
-@Composable
-private fun LibraryAndFileIoView(
-    palette: MeridianPalette,
-    documents: List<BookDocument>,
-    selectedBookId: String,
-    reminders: Map<String, PageReminder>,
-    telemetryMap: Map<String, BookReadingTelemetry>,
-    onSelectBook: (String) -> Unit,
-    onCreateDocument: (title: String, author: String, format: DocumentFormat) -> Unit,
-    onImportFromPath: (String) -> Unit,
-    onExportToPath: (bookId: String, targetPath: String) -> Unit,
-    onPickFileToImport: ((onPathSelected: (String) -> Unit) -> Unit)?,
-    onPickFileToExport: ((defaultFileName: String, onPathSelected: (String) -> Unit) -> Unit)?,
-) {
-    var newDocTitle by remember { mutableStateOf("") }
-    var newDocAuthor by remember { mutableStateOf("Meridian Archive") }
-    var newDocFormat by remember { mutableStateOf(DocumentFormat.EPUB) }
-    var filePathInput by remember { mutableStateOf("") }
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Surface(
-                color = palette.pageSurface,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, palette.border),
-                modifier = Modifier.weight(1f),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "CREATE NEW PDF / EPUB FOLIO",
-                        color = palette.ink,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = newDocTitle,
-                            onValueChange = { newDocTitle = it },
-                            label = { Text("Title", fontSize = 11.sp) },
-                            singleLine = true,
-                            colors = textFieldColors,
-                            modifier = Modifier
-                                .weight(1f)
-                                .shioriTextFieldFocusGuard(),
-                        )
-                        DocumentFormat.entries.forEach { fmt ->
-                            val sel = fmt == newDocFormat
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (sel) palette.accentGreen else palette.pillBg)
-                                    .clickable { newDocFormat = fmt }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                            ) {
-                                Text(
-                                    fmt.name,
-                                    color = if (sel) palette.onAccent else palette.ink,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            }
-                        }
-                        Button(
-                            onClick = {
-                                onCreateDocument(newDocTitle, newDocAuthor, newDocFormat)
-                                newDocTitle = ""
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = palette.accentGreen, contentColor = palette.onAccent),
-                        ) {
-                            Text("Create", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-
-            Surface(
-                color = palette.pageSurface,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, palette.border),
-                modifier = Modifier.weight(1f),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "OPEN OR EXPORT .PDF / .EPUB FILE ON DISK",
-                        color = palette.ink,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = filePathInput,
-                            onValueChange = { filePathInput = it },
-                            label = { Text("File path (.pdf or .epub)", fontSize = 11.sp) },
-                            singleLine = true,
-                            colors = textFieldColors,
-                            modifier = Modifier
-                                .weight(1f)
-                                .shioriTextFieldFocusGuard(),
-                        )
-                        if (onPickFileToImport != null) {
-                            Button(
-                                onClick = {
-                                    onPickFileToImport { picked ->
-                                        filePathInput = picked
-                                        onImportFromPath(picked)
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = palette.accentGreen, contentColor = palette.onAccent),
-                            ) {
-                                Text("Browse...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                if (filePathInput.isNotBlank()) onImportFromPath(filePathInput.trim())
-                            },
-                            border = BorderStroke(1.dp, palette.border),
-                        ) {
-                            Text("Import", color = palette.ink, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        documents.forEach { doc ->
-            val isSelected = doc.id == selectedBookId
-            val pred = ReadingPredictionEngine.computePrediction(doc, telemetryMap[doc.id])
-            val rem = reminders[doc.id]
-            Surface(
-                color = palette.pageSurface,
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) palette.accentGreen else palette.border),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(palette.accentGreen)
-                                    .padding(horizontal = 7.dp, vertical = 2.dp),
-                            ) {
-                                Text(doc.format.name, color = palette.onAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text(
-                                text = doc.title,
-                                color = palette.ink,
-                                fontFamily = FontFamily.Serif,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 18.sp,
-                            )
-                        }
-                        Text(
-                            text = "By ${doc.author} · Page ${doc.currentPage} of ${doc.totalPages} (${doc.totalWords} words) · Read Time: ${pred.formattedActiveTime()} · Est. Remaining: ${pred.formattedRemainingTime()}",
-                            color = palette.inkSoft,
-                            fontSize = 12.5.sp,
-                        )
-                        if (rem != null) {
-                            Text(
-                                text = "Reminder set for Page ${rem.pageNumber}: \"${rem.note}\"",
-                                color = palette.ink,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                            )
-                        }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val existingFilePath = doc.filePath
-                        if (existingFilePath != null) {
-                            OutlinedButton(
-                                onClick = { onImportFromPath(existingFilePath) },
-                                border = BorderStroke(1.dp, palette.border),
-                            ) {
-                                Text("Reload File", color = palette.ink, fontSize = 12.sp)
-                            }
-                        }
-                        Button(
-                            onClick = { onSelectBook(doc.id) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) palette.accentGreen else palette.pillBg,
-                                contentColor = if (isSelected) palette.onAccent else palette.ink,
-                            ),
-                        ) {
-                            Text(
-                                text = if (isSelected) "Reading Now" else "Open in Reader",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val defaultName = "${doc.title.replace(Regex("[^A-Za-z0-9_\\-]"), "_")}.${doc.format.extension}"
-                                if (onPickFileToExport != null) {
-                                    onPickFileToExport(defaultName) { target ->
-                                        onExportToPath(doc.id, target)
-                                    }
-                                } else {
-                                    val fallback = if (filePathInput.isNotBlank()) filePathInput.trim() else defaultName
-                                    onExportToPath(doc.id, fallback)
-                                }
-                            },
-                            border = BorderStroke(1.dp, palette.border),
-                        ) {
-                            Text("Export .${doc.format.extension.uppercase()}", color = palette.ink, fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * SETTINGS, APPEARANCE, TYPOGRAPHY & KEYBOARD SHORTCUTS VIEW (Iteraciones 2 y 3 · Puntos 1 y 3)
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SettingsAndShortcutsWorkspaceView(
-    palette: MeridianPalette,
-    theme: ReaderTheme,
-    pdfPageColorMode: PdfPageColorMode,
-    currentBook: BookDocument,
-    fontSizePt: Float,
-    lineSpacingMultiplier: Float,
-    uiAppearance: UiAppearanceSettings,
-    bookTypography: BookTypographySettings,
-    keyBindings: Map<ReaderAction, KeyBindingSpec>,
-    rebindingAction: ReaderAction?,
-    onStartRebind: (ReaderAction) -> Unit,
-    onCancelRebind: () -> Unit,
-    onResetKeyBindings: () -> Unit,
-    onSelectTheme: (ReaderTheme) -> Unit,
-    onSelectPdfColorMode: (PdfPageColorMode) -> Unit,
-    onFontSizeChange: (Float) -> Unit,
-    onLineSpacingChange: (Float) -> Unit,
-    onUpdateUiAppearance: ((UiAppearanceSettings) -> UiAppearanceSettings) -> Unit,
-    onUpdateBookTypography: ((BookTypographySettings) -> BookTypographySettings) -> Unit,
-    onResetUiAppearance: () -> Unit,
-    onResetBookTypography: () -> Unit,
-    onResetAllAppearance: () -> Unit,
-) {
-    val isPdfOriginalMode = currentBook.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
-            .verticalScroll(rememberScrollState())
-            .testTag("settings_workspace_view"),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // 1. APARIENCIA DE LA INTERFAZ (UI APPEARANCE & SCALING — Punto 3)
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("settings_ui_appearance_card"),
-        ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "APARIENCIA Y ESCALADO DE LA INTERFAZ (UI)",
-                            color = palette.muted,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.1.sp,
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "Ajusta la fuente, tamaño, peso tipográfico, contraste compatible con el tema y escala general de los menús, pestañas y controles (independiente del contenido del libro).",
-                            color = palette.inkSoft,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = onResetUiAppearance,
-                            border = BorderStroke(1.dp, palette.border),
-                            modifier = Modifier.testTag("reset_ui_appearance_btn"),
-                        ) {
-                            Text("Restaurar UI", color = palette.ink, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                        OutlinedButton(
-                            onClick = onResetAllAppearance,
-                            border = BorderStroke(1.dp, palette.border),
-                            modifier = Modifier.testTag("reset_all_appearance_btn"),
-                        ) {
-                            Text("Restaurar Todo", color = palette.accentGreen, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-
-                // UI Font Family
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "Fuente de la interfaz (pestañas y controles):",
-                        color = palette.ink,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        UiFontFamilyOption.entries.forEach { opt ->
-                            val sel = uiAppearance.fontFamily == opt
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (sel) palette.accentGreen else palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                        onUpdateUiAppearance { it.copy(fontFamily = opt) }
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp)
-                                    .testTag("ui_font_family_${opt.name}"),
-                            ) {
-                                Text(
-                                    text = opt.label,
-                                    color = if (sel) palette.onAccent else palette.ink,
-                                    fontFamily = opt.toComposeFontFamily(),
-                                    fontSize = 12.sp,
-                                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // UI Font Weight, Size & Scale Row
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    // Peso de fuente UI
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Peso de fuente UI:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            UiFontWeightOption.entries.forEach { weightOpt ->
-                                val sel = uiAppearance.fontWeight == weightOpt
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(if (sel) palette.accentGreen else palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onUpdateUiAppearance { it.copy(fontWeight = weightOpt) }
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        .testTag("ui_font_weight_${weightOpt.name}"),
-                                ) {
-                                    Text(
-                                        text = weightOpt.label,
-                                        color = if (sel) palette.onAccent else palette.ink,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = weightOpt.toComposeFontWeight(),
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Tamaño de texto de la interfaz
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Tamaño texto UI:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateUiAppearance {
-                                            it.copy(fontSizeSp = (it.fontSizeSp - 0.5f).coerceIn(11f, 16f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("ui_font_size_dec_btn"),
-                            ) {
-                                Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                            Text(
-                                text = "${uiAppearance.fontSizeSp} sp",
-                                color = palette.ink,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.testTag("ui_font_size_label"),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateUiAppearance {
-                                            it.copy(fontSizeSp = (it.fontSizeSp + 0.5f).coerceIn(11f, 16f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("ui_font_size_inc_btn"),
-                            ) {
-                                Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        }
-                    }
-
-                    // Escala de la interfaz (DPI / UI Scale)
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Escala de la interfaz:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateUiAppearance {
-                                            val next = ((it.uiScale - 0.05f) * 100f).toInt() / 100f
-                                            it.copy(uiScale = next.coerceIn(0.85f, 1.35f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("ui_scale_dec_btn"),
-                            ) {
-                                Text("−5%", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                            }
-                            Text(
-                                text = "${(uiAppearance.uiScale * 100).toInt()}%",
-                                color = palette.accentGreen,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.testTag("ui_scale_label"),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateUiAppearance {
-                                            val next = ((it.uiScale + 0.05f) * 100f).toInt() / 100f
-                                            it.copy(uiScale = next.coerceIn(0.85f, 1.35f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("ui_scale_inc_btn"),
-                            ) {
-                                Text("+5%", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                            }
-                        }
-                    }
-
-                    // Contraste reforzado compatible con el tema
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Colores y legibilidad del tema:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(7.dp))
-                                .background(if (uiAppearance.highContrastText) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                    onUpdateUiAppearance { it.copy(highContrastText = !it.highContrastText) }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                .testTag("ui_high_contrast_toggle"),
-                        ) {
-                            Text(
-                                text = if (uiAppearance.highContrastText) "✓ Alto Contraste Activado" else "Contraste Estándar Editorial",
-                                color = if (uiAppearance.highContrastText) palette.onAccent else palette.ink,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. TIPOGRAFÍA Y DISTRIBUCIÓN DEL CONTENIDO DEL LIBRO (Punto 3)
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("settings_book_typography_card"),
-        ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "TIPOGRAFÍA Y DISTRIBUCIÓN DEL CONTENIDO DEL LIBRO (${currentBook.format.label.uppercase()})",
-                            color = palette.muted,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.1.sp,
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "Configura la lectura para EPUB y modo de texto adaptable (fuente, tamaño, interlineado, separación entre párrafos, márgenes y alineación).",
-                            color = palette.inkSoft,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onResetBookTypography,
-                        border = BorderStroke(1.dp, palette.border),
-                        modifier = Modifier.testTag("reset_book_typography_btn"),
-                    ) {
-                        Text("Restaurar Libro", color = palette.ink, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-
-                // Selector Vista Original vs Texto Adaptable cuando el libro actual es PDF
-                if (currentBook.format == DocumentFormat.PDF) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Modo de contenido PDF:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (!bookTypography.pdfPreferReflowText) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                    onUpdateBookTypography { it.copy(pdfPreferReflowText = false) }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
-                                .testTag("settings_pdf_original_mode_btn"),
-                        ) {
-                            Text(
-                                text = "Vista Original Fiel al PDF",
-                                color = if (!bookTypography.pdfPreferReflowText) palette.onAccent else palette.ink,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (bookTypography.pdfPreferReflowText) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                    onUpdateBookTypography { it.copy(pdfPreferReflowText = true) }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
-                                .testTag("settings_pdf_reflow_mode_btn"),
-                        ) {
-                            Text(
-                                text = "Modo Texto Adaptable (Reflujo)",
-                                color = if (bookTypography.pdfPreferReflowText) palette.onAccent else palette.ink,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                }
-
-                if (isPdfOriginalMode) {
-                    Surface(
-                        color = palette.elevatedSurface,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, palette.border),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("pdf_original_typography_notice"),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Documento PDF en Vista Original",
-                                color = palette.ink,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.5.sp,
-                            )
-                            Text(
-                                text = "En la vista original de un PDF se respeta la maquetación fija, tipografía incrustada e ilustraciones a página completa del documento. Para personalizar la fuente, tamaño, interlineado, separación de párrafos o alineación, cambia a «Modo Texto Adaptable (Reflujo)» o abre un libro EPUB.",
-                                color = palette.inkSoft,
-                                fontSize = 12.sp,
-                            )
-                        }
-                    }
-                } else {
-                    // Controles exclusivos de EPUB y Modo de Texto Adaptable
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Fuente del contenido (EPUB / Texto Adaptable):",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            BookFontFamilyOption.entries.forEach { fontOpt ->
-                                val sel = bookTypography.fontFamily == fontOpt
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (sel) palette.accentGreen else palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                            onUpdateBookTypography { it.copy(fontFamily = fontOpt) }
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 7.dp)
-                                        .testTag("book_font_family_${fontOpt.name}"),
-                                ) {
-                                    Text(
-                                        text = fontOpt.label,
-                                        color = if (sel) palette.onAccent else palette.ink,
-                                        fontFamily = fontOpt.toComposeFontFamily(),
-                                        fontSize = 12.sp,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Alineación del texto
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Alineación de párrafos:",
-                            color = palette.ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            BookTextAlignment.entries.forEach { alignOpt ->
-                                val sel = bookTypography.textAlignment == alignOpt
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (sel) palette.accentGreen else palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                            onUpdateBookTypography { it.copy(textAlignment = alignOpt) }
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 7.dp)
-                                        .testTag("book_text_align_${alignOpt.name}"),
-                                ) {
-                                    Text(
-                                        text = alignOpt.label,
-                                        color = if (sel) palette.onAccent else palette.ink,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Tamaño, Interlineado y Separación entre párrafos
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        // Tamaño de fuente del libro
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Tamaño de letra:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onFontSizeChange(fontSizePt - 1f)
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_font_size_dec_btn"),
-                                ) {
-                                    Text("A−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "${fontSizePt.toInt()} pt",
-                                    color = palette.ink,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.testTag("book_font_size_label"),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onFontSizeChange(fontSizePt + 1f)
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_font_size_inc_btn"),
-                                ) {
-                                    Text("A+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-
-                        // Interlineado
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Interlineado:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onLineSpacingChange(lineSpacingMultiplier - 0.1f)
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_line_spacing_dec_btn"),
-                                ) {
-                                    Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "${((lineSpacingMultiplier * 10).toInt() / 10f)}x",
-                                    color = palette.ink,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.testTag("book_line_spacing_label"),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onLineSpacingChange(lineSpacingMultiplier + 0.1f)
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_line_spacing_inc_btn"),
-                                ) {
-                                    Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-
-                        // Separación entre párrafos
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Separación entre párrafos:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onUpdateBookTypography {
-                                                it.copy(paragraphSpacingDp = (it.paragraphSpacingDp - 2f).coerceIn(0f, 36f))
-                                            }
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_para_spacing_dec_btn"),
-                                ) {
-                                    Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "${bookTypography.paragraphSpacingDp.toInt()} dp",
-                                    color = palette.ink,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.testTag("book_para_spacing_label"),
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                            onUpdateBookTypography {
-                                                it.copy(paragraphSpacingDp = (it.paragraphSpacingDp + 2f).coerceIn(0f, 36f))
-                                            }
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("book_para_spacing_inc_btn"),
-                                ) {
-                                    Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-
-                        // Normalizar espacios y saltos de página excesivos conservando cambios de escena
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Espacios y saltos:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(if (bookTypography.normalizeExcessiveSpaces) palette.accentGreen else palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateBookTypography {
-                                            it.copy(normalizeExcessiveSpaces = !it.normalizeExcessiveSpaces)
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("book_normalize_spaces_toggle"),
-                            ) {
-                                Text(
-                                    text = if (bookTypography.normalizeExcessiveSpaces) {
-                                        "Normalizar espacios excesivos (Activo)"
-                                    } else {
-                                        "Conservar todos los saltos originales"
-                                    },
-                                    color = if (bookTypography.normalizeExcessiveSpaces) palette.onAccent else palette.ink,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Márgenes horizontales y verticales de la hoja (aplicables tanto a EPUB como a hojas del libro)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Márgenes horizontales:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateBookTypography {
-                                            it.copy(horizontalMarginDp = (it.horizontalMarginDp - 4f).coerceIn(8f, 72f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("book_h_margin_dec_btn"),
-                            ) {
-                                Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                            Text(
-                                text = "${bookTypography.horizontalMarginDp.toInt()} dp",
-                                color = palette.ink,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.testTag("book_h_margin_label"),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateBookTypography {
-                                            it.copy(horizontalMarginDp = (it.horizontalMarginDp + 4f).coerceIn(8f, 72f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("book_h_margin_inc_btn"),
-                            ) {
-                                Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        }
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Márgenes verticales:", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateBookTypography {
-                                            it.copy(verticalMarginDp = (it.verticalMarginDp - 4f).coerceIn(8f, 56f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("book_v_margin_dec_btn"),
-                            ) {
-                                Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                            Text(
-                                text = "${bookTypography.verticalMarginDp.toInt()} dp",
-                                color = palette.ink,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.testTag("book_v_margin_label"),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(7.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(7.dp))
-                                    .shioriFocusableClickable(palette, RoundedCornerShape(7.dp)) {
-                                        onUpdateBookTypography {
-                                            it.copy(verticalMarginDp = (it.verticalMarginDp + 4f).coerceIn(8f, 56f))
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                    .testTag("book_v_margin_inc_btn"),
-                            ) {
-                                Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. THEME & PDF COLOR CONSISTENCY CARD
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "TEMA VISUAL Y TRANSFORMACIÓN DE COLOR EN PDF",
-                    color = palette.muted,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.1.sp,
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ReaderTheme.entries.forEach { t ->
-                        val sel = t == theme
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (sel) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
-                                    onSelectTheme(t)
-                                }
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        ) {
-                            Text(
-                                text = t.label,
-                                color = if (sel) palette.onAccent else palette.ink,
-                                fontSize = 12.sp,
-                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    PdfPageColorMode.entries.forEach { m ->
-                        val sel = m == pdfPageColorMode
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (sel) palette.accentGreen else palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
-                                    onSelectPdfColorMode(m)
-                                }
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        ) {
-                            Text(
-                                text = "PDF: ${m.label}",
-                                color = if (sel) palette.onAccent else palette.ink,
-                                fontSize = 12.sp,
-                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. KEYBOARD NAVIGATION & CUSTOMIZABLE SHORTCUTS CARD
-        Surface(
-            color = palette.pageSurface,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "ATAJOS DE TECLADO Y NAVEGACIÓN (WINDOWS & LINUX)",
-                            color = palette.muted,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.1.sp,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Navegación por controles (Tab / Shift + Tab), pestañas (Ctrl + Tab / Ctrl + Shift + Tab), historial de lectura (Alt + ← / Alt + →) y cambio de páginas con flechas o Page Up / Page Down.",
-                            color = palette.inkSoft,
-                            fontSize = 12.5.sp,
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onResetKeyBindings,
-                        border = BorderStroke(1.dp, palette.border),
-                        modifier = Modifier.testTag("reset_shortcuts_btn"),
-                    ) {
-                        Text("Restaurar Predeterminados", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-
-                if (rebindingAction != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        color = palette.warningAmber.copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.5.dp, palette.warningAmber),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("rebind_prompt_banner"),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "⌨ Presiona la nueva combinación de teclas para «${rebindingAction.label}» (o Esc para cancelar)...",
-                                color = palette.ink,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            OutlinedButton(
-                                onClick = onCancelRebind,
-                                border = BorderStroke(1.dp, palette.border),
-                                modifier = Modifier.testTag("cancel_rebind_btn"),
-                            ) {
-                                Text("Cancelar", color = palette.ink, fontSize = 11.5.sp)
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Surface(
-                    color = palette.elevatedSurface,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, palette.border),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Recorrer controles interactivos con indicador de foco visible",
-                            color = palette.ink,
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                            text = "Tab / Shift + Tab · Flechas ← → ↑ ↓",
-                            color = palette.accentGreen,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.5.sp,
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                ReaderAction.entries.forEach { action ->
-                    val currentSpec = keyBindings[action] ?: action.defaultSpec
-                    val isRebindingThis = rebindingAction == action
-                    Surface(
-                        color = if (isRebindingThis) palette.pillBg else palette.elevatedSurface,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(
-                            width = if (isRebindingThis) 1.5.dp else 1.dp,
-                            color = if (isRebindingThis) palette.accentGreen else palette.border,
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = action.label,
-                                    color = palette.ink,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.5.sp,
-                                )
-                                Text(
-                                    text = action.description,
-                                    color = palette.inkSoft,
-                                    fontSize = 11.5.sp,
-                                )
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                        .testTag("shortcut_badge_${action.name}"),
-                                ) {
-                                    Text(
-                                        text = if (isRebindingThis) "Esperando tecla..." else currentSpec.displayLabel(),
-                                        color = if (isRebindingThis) palette.warningAmber else palette.ink,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (isRebindingThis) palette.accentGreen else palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                                        .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(6.dp)) {
-                                            if (isRebindingThis) onCancelRebind() else onStartRebind(action)
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        .testTag("rebind_action_${action.name}"),
-                                ) {
-                                    Text(
-                                        text = if (isRebindingThis) "Cancelar" else "Cambiar atajo",
-                                        color = if (isRebindingThis) palette.onAccent else palette.ink,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
                             }
                         }
                     }

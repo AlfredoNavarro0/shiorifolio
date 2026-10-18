@@ -9,6 +9,8 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 actual object PlatformFileAndZipIo {
+    private var applicationStorageDirectory: String? = null
+    fun setApplicationStorageDirectory(path: String) { applicationStorageDirectory = path }
     actual fun unzipEntries(bytes: ByteArray): Map<String, ByteArray> {
         val entries = LinkedHashMap<String, ByteArray>()
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
@@ -68,7 +70,8 @@ actual object PlatformFileAndZipIo {
             val home = System.getProperty("user.home") ?: System.getProperty("java.io.tmpdir") ?: "."
             val safeBook = bookId.replace(Regex("[^A-Za-z0-9_\\-]"), "_")
             val safeName = relativeName.replace('\\', '/').trimStart('/').replace("..", "_")
-            val target = File(File(File(home, ".meridian-folio"), "media/$safeBook"), safeName)
+            val storage = applicationStorageDirectory?.let(::File) ?: File(home, ".meridian-folio")
+            val target = File(File(storage, "media/$safeBook"), safeName)
             target.parentFile?.mkdirs()
             target.writeBytes(bytes)
             target.absolutePath

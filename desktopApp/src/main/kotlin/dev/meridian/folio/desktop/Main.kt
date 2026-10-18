@@ -22,6 +22,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
+import javax.swing.JFileChooser
 import org.jetbrains.skia.Image
 
 fun main(args: Array<String>) {
@@ -49,6 +50,15 @@ fun main(args: Array<String>) {
         ) {
             MeridianFolioApp(
                 repository = repository,
+                onPickFolder = { onSelected ->
+                    val chooser = JFileChooser().apply {
+                        dialogTitle = "Añadir carpeta a la biblioteca"
+                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                    }
+                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                        onSelected(chooser.selectedFile.canonicalPath)
+                    }
+                },
                 isWindowFullscreen = windowState.placement == WindowPlacement.Fullscreen,
                 onToggleWindowFullscreen = {
                     windowState.placement = if (windowState.placement == WindowPlacement.Fullscreen) {

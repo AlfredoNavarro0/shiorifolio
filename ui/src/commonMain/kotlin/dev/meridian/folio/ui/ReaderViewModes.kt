@@ -193,67 +193,17 @@ internal fun VerticalPaginatedReaderCanvas(
     onQuickSavePhrase: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = (book.currentPage - 1).coerceIn(0, (book.pages.size - 1).coerceAtLeast(0)),
-    )
-
-    LaunchedEffect(book.id, book.currentPage) {
-        val targetIdx = (book.currentPage - 1).coerceIn(0, (book.pages.size - 1).coerceAtLeast(0))
-        if (listState.firstVisibleItemIndex != targetIdx) {
-            listState.scrollToItem(targetIdx)
-        }
-    }
-
+    val page = book.pages.firstOrNull { it.pageNumber == book.currentPage } ?: book.pages.first()
     val effectiveFontSize = (fontSizePt * zoomScale.coerceIn(0.70f, 1.80f)).coerceIn(12f, 34f)
-    val effectiveLineHeight = effectiveFontSize * lineSpacingMultiplier
-
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("vertical_paginated_canvas"),
-        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        items(book.pages, key = { "${book.id}_vpage_${it.pageNumber}" }) { page ->
-            val isCurrentPage = page.pageNumber == book.currentPage
-            Surface(
-                color = palette.pageSurface,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(
-                    width = if (isCurrentPage) 1.5.dp else 1.dp,
-                    color = if (isCurrentPage) palette.accentGreen else palette.border,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 520.dp, max = 940.dp)
-                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(14.dp))
-                    .clickable {
-                        if (book.currentPage != page.pageNumber) {
-                            onPageChange(page.pageNumber)
-                        }
-                    }
-                    .testTag("vertical_page_sheet_${page.pageNumber}"),
-            ) {
-                StitchBookSpreadLeaf(
-                    palette = palette,
-                    pdfPageColorMode = pdfPageColorMode,
-                    book = book,
-                    page = page,
-                    savedPhrases = savedPhrases,
-                    fontSizeSp = effectiveFontSize,
-                    lineHeightSp = effectiveLineHeight,
-                    bookTypography = bookTypography,
-                    isLeftLeaf = false,
-                    reserveRightBookmarkSpace = page.pageNumber == book.currentPage,
-                    onQuickSavePhrase = onQuickSavePhrase,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
+    val pagination = LocalReaderPagination.current
+    Surface(color = palette.pageSurface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, palette.border),
+        modifier = modifier.fillMaxSize().testTag("vertical_paginated_canvas")
+            .readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) }) {
+        StitchBookSpreadLeaf(palette, pdfPageColorMode, book, page, savedPhrases, effectiveFontSize,
+            effectiveFontSize * lineSpacingMultiplier, bookTypography, isLeftLeaf = false,
+            onQuickSavePhrase = onQuickSavePhrase, modifier = Modifier.fillMaxSize().testTag("vertical_page_sheet_${page.pageNumber}"))
     }
 }
-
 /**
  * Mode 4: VERTICAL_CONTINUOUS ("Desplazamiento vertical continuo" — Puntos 4 y 5).
  * Presents a continuous reading stream across all pages, joining paragraphs split across page breaks
@@ -444,91 +394,20 @@ internal fun AdaptiveReflowReaderCanvas(
                 onRunOcrOnPage = onRunOcrOnPage,
             )
 
-            // Reconstructed Reflow Content
-            SelectionContainer(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(paraSpacing),
-                ) {
-                    if (reconstruction.items.isEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text(
-                                text = "Esta página del PDF contiene principalmente una ilustración o imagen escaneada sin capa de texto extraíble.",
-                                color = palette.inkSoft,
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.accentGreen)
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                            onRunOcrOnPage(page.pageNumber)
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                                        .testTag("pdf_ocr_empty_page_btn"),
-                                ) {
-                                    Text(
-                                        text = "🔍 Ejecutar OCR en Folio ${page.pageNumber}",
-                                        color = palette.onAccent,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                        .shioriFocusableClickable(palette, RoundedCornerShape(8.dp)) {
-                                            onReturnToOriginalView()
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                                ) {
-                                    Text(
-                                        text = "Volver a Vista Original",
-                                        color = palette.ink,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        reconstruction.items.forEach { item ->
-                            ReflowBlockItemView(
-                                palette = palette,
-                                pdfPageColorMode = pdfPageColorMode,
-                                book = book,
-                                item = item,
-                                savedPhrases = savedPhrases,
-                                contentFontFamily = contentFontFamily,
-                                contentTextAlign = contentTextAlign,
-                                fontSizeSp = effectiveFontSize,
-                                lineHeightSp = effectiveLineHeight,
-                                showMarginalPageBadge = false,
-                                onSelectSourcePage = {},
-                                onQuickSavePhrase = onQuickSavePhrase,
-                            )
-                        }
-                    }
+            if (reconstruction.items.isEmpty()) {
+                Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Esta página no contiene texto extraíble. Puedes reconocer el texto o volver al documento original.", color = palette.inkSoft)
+                    ModernChromeAction("Reconocer texto", palette, "pdf_ocr_empty_page_btn") { onRunOcrOnPage(page.pageNumber) }
+                    ModernChromeAction("Volver a Vista Original", palette, "reflow_empty_original_btn", onClick = onReturnToOriginalView)
                 }
+            } else {
+                val reflowPage = remember(page, reconstruction.items) {
+                    page.copy(blocks = reconstruction.items.map { dev.meridian.folio.core.ContentBlock(it.id, it.style, it.text, it.imagePath) })
+                }
+                PagedBookBody(palette, pdfPageColorMode, book, reflowPage,
+                    savedPhrases.filter { it.pageNumber == page.pageNumber }, effectiveFontSize, effectiveLineHeight,
+                    bookTypography, onQuickSavePhrase, Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp))
             }
-
             // Bottom Footer
             Column(modifier = Modifier.fillMaxWidth()) {
                 HorizontalDivider(color = palette.border.copy(alpha = 0.65f), thickness = 1.dp)

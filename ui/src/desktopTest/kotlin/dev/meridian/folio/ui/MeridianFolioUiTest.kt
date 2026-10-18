@@ -7,6 +7,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asSkiaBitmap
+import org.jetbrains.skia.Image
+import org.jetbrains.skia.EncodedImageFormat
+import java.io.File
 import androidx.compose.ui.test.runComposeUiTest
 import dev.meridian.folio.core.FolioRepository
 import dev.meridian.folio.core.PageViewMode
@@ -44,6 +49,19 @@ class MeridianFolioUiTest {
         assertEquals(ReaderTheme.DARK, repo.state.value.theme)
         onNodeWithTag("theme_toggle_button").performClick()
         assertEquals(ReaderTheme.WHITE, repo.state.value.theme)
+
+        // Capture the native reader in every tone after exercising the shared controls.
+        repo.setViewMode(PageViewMode.TWO_COLUMNS)
+        for (theme in ReaderTheme.entries) {
+            repo.setTheme(theme)
+            waitForIdle()
+            val snapshot = onNodeWithTag("meridian_root").captureToImage()
+            Image.makeFromBitmap(snapshot.asSkiaBitmap()).use { image ->
+                image.encodeToData(EncodedImageFormat.PNG)?.use {
+                    File("build/reader-modern-${theme.name}.png").writeBytes(it.bytes)
+                }
+            }
+        }
     }
 
     @Test
@@ -112,6 +130,7 @@ class MeridianFolioUiTest {
     fun navigationHistoryDistinguishesPageTurnsFromJumpsAndRestoresPosition() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         val bookId = repo.currentBook()!!.id
+        repo.currentBook()!!.pages.forEach { page -> repo.updatePageContent(bookId, page.pageNumber, "Historial", listOf(dev.meridian.folio.core.ContentBlock("short-${page.pageNumber}", text = "Una página breve para probar el historial."))) }
 
         setContent {
             MeridianFolioApp(repository = repo)
@@ -159,6 +178,7 @@ class MeridianFolioUiTest {
         waitForIdle()
 
         onNodeWithTag("settings_workspace_view").assertExists()
+        onNodeWithTag("settings_category_shortcuts").performClick()
         onNodeWithTag("shortcut_badge_TOGGLE_ZEN_MODE").assertExists()
 
         // Customize a shortcut and verify persistence in repository state
@@ -196,6 +216,7 @@ class MeridianFolioUiTest {
         waitForIdle()
 
         onNodeWithTag("settings_ui_appearance_card").assertExists()
+        onNodeWithTag("settings_category_reading").performClick()
         onNodeWithTag("settings_book_typography_card").assertExists()
 
         // In PDF Original View, the notice is displayed instead of reflow font pickers
@@ -214,6 +235,7 @@ class MeridianFolioUiTest {
         )
 
         // Modify UI scale and high contrast in UI Appearance card
+        onNodeWithTag("settings_category_appearance").performClick()
         onNodeWithTag("ui_scale_inc_btn").performScrollTo().performClick()
         onNodeWithTag("ui_high_contrast_toggle").performScrollTo().performClick()
         waitForIdle()
