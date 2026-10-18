@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.*
+import dev.meridian.folio.ui.theme.*
 import kotlin.math.roundToInt
 
 /** Cover-led shelf: actions live in the cover's menu, leaving the artwork and title visible. */
@@ -34,7 +35,7 @@ import kotlin.math.roundToInt
 internal fun LibraryBookCard(
     book: BookDocument,
     telemetry: BookReadingTelemetry?,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     detailed: Boolean,
     selected: Boolean,
     selectionMode: Boolean,
@@ -53,14 +54,14 @@ internal fun LibraryBookCard(
     val percent = (book.libraryProgress() * 100).roundToInt()
     val coverShape = RoundedCornerShape(16.dp)
     val lift by animateFloatAsState(if (hovered || focused) -4f else 0f, tween(220))
-    val overlayInk = if (palette.isDark) palette.ink else palette.pageSurface
+    val overlayInk = if (palette.isDarkReading) palette.onSurface else palette.surfaceContainerLowest
 
     Column(Modifier.fillMaxWidth().testTag("library_book_${book.id}"), verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Box(Modifier.graphicsLayer { translationY = lift * density }
             .shadow(if (hovered) 8.dp else 3.dp, coverShape, ambientColor = palette.spineShadow.copy(alpha = 0.12f), spotColor = palette.spineShadow.copy(alpha = 0.12f))) {
             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(coverShape)
                 .border(if (selected || hovered || focused) 2.dp else 1.dp,
-                    if (focused) palette.focusRing else if (selected || hovered) palette.accentGreen else palette.border.copy(alpha = 0.65f), coverShape)
+                    if (focused) palette.focusRing else if (selected || hovered) palette.primary else palette.outlineVariant.copy(alpha = 0.65f), coverShape)
                 .clickable(interactionSource = interactions, indication = null,
                     onClickLabel = if (selectionMode) "Seleccionar ${book.title}" else "Leer ${book.title}") {
                     if (selectionMode) onToggleSelection() else onOpen()
@@ -78,7 +79,7 @@ internal fun LibraryBookCard(
                         trackColor = overlayInk.copy(alpha = 0.25f), modifier = Modifier.fillMaxWidth().height(3.dp))
                 }
                 if ((hovered || focused) && !selectionMode) Box(Modifier.fillMaxSize().background(palette.spineShadow.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
-                    Surface(color = palette.pageSurface, contentColor = palette.ink, shape = RoundedCornerShape(8.dp)) {
+                    Surface(color = palette.surfaceContainerLowest, contentColor = palette.onSurface, shape = RoundedCornerShape(8.dp)) {
                         Text(if (percent > 0) "Continuar lectura" else "Abrir libro", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                     }
@@ -86,7 +87,7 @@ internal fun LibraryBookCard(
             }
             if (selectionMode || hovered) {
                 Checkbox(selected, { onToggleSelection() }, modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
-                    .clip(RoundedCornerShape(12.dp)).background(palette.paper.copy(alpha = 0.94f))
+                    .clip(RoundedCornerShape(12.dp)).background(palette.canvas.copy(alpha = 0.94f))
                     .testTag("library_select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" })
             } else {
                 Text(book.format.name,
@@ -97,8 +98,8 @@ internal fun LibraryBookCard(
             Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                 IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(48.dp)
                     .testTag("library_menu_${book.id}").semantics { contentDescription = "Opciones de ${book.title}" }) {
-                    Text("⋯", color = palette.ink, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(palette.paper.copy(alpha = 0.88f))
+                    Text("⋯", color = palette.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(palette.canvas.copy(alpha = 0.88f))
                             .padding(horizontal = 9.dp, vertical = 1.dp))
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
@@ -111,23 +112,23 @@ internal fun LibraryBookCard(
                         enabled = !book.isMissingOnDisk, onClick = { menuExpanded = false; onReload() }, modifier = Modifier.testTag("library_reload_${book.id}"))
                     if (reminder != null) {
                         HorizontalDivider()
-                        Text("Recordatorio · pág. ${reminder.pageNumber}\n${reminder.note}", color = palette.inkSoft,
+                        Text("Recordatorio · pág. ${reminder.pageNumber}\n${reminder.note}", color = palette.onSurfaceVariant,
                             fontSize = 12.sp, modifier = Modifier.widthIn(max = 260.dp).padding(16.dp))
                     }
                 }
             }
         }
-        Text(book.title, color = if (hovered) palette.accentGreen else palette.ink, fontFamily = FontFamily.SansSerif, fontSize = 15.sp,
+        Text(book.title, color = if (hovered) palette.primary else palette.onSurface, fontFamily = FontFamily.SansSerif, fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold, lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clickable { if (selectionMode) onToggleSelection() else onOpen() }.testTag("library_title_${book.id}"))
-        Text(book.author, color = palette.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(book.author, color = palette.onSurfaceVariant, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("${book.format.name} · ${book.totalPages} " + if (book.format == DocumentFormat.EPUB) "págs. estimadas" else "págs.",
-            color = palette.muted, fontFamily = FontFamily.SansSerif, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            color = palette.textMuted, fontFamily = FontFamily.SansSerif, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (detailed) {
-            Text("${book.libraryStatus.label} · ${prediction.formattedRemainingTime()} restantes", color = palette.inkSoft,
+            Text("${book.libraryStatus.label} · ${prediction.formattedRemainingTime()} restantes", color = palette.onSurfaceVariant,
                 fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if ((telemetry?.totalActiveSeconds ?: 0.0) > 0) "Según tu ritmo" else "Estimado inicial",
-                color = palette.muted, fontSize = 11.sp)
+                color = palette.textMuted, fontSize = 11.sp)
         }
         if (book.isMissingOnDisk) Text("No disponible en disco", color = palette.warningAmber,
             fontSize = 12.sp, modifier = Modifier.testTag("library_missing_${book.id}"))

@@ -39,6 +39,7 @@ import dev.meridian.folio.core.BlockStyle
 import dev.meridian.folio.core.BookDocument
 import dev.meridian.folio.core.BookTextSearch
 import dev.meridian.folio.core.FolioRepository
+import dev.meridian.folio.ui.theme.*
 
 /**
  * Non-destructive editing dialogs: search/replace, page correction, chapter
@@ -49,14 +50,14 @@ import dev.meridian.folio.core.FolioRepository
 @Composable
 internal fun SearchReplaceDialog(
     repository: FolioRepository,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     book: BookDocument,
     onClose: () -> Unit,
     onStatus: (String) -> Unit,
 ) {
     val state by repository.state.collectAsState()
     val liveBook = state.documents.find { it.id == book.id } ?: book
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
     var query by remember { mutableStateOf("") }
     var replacement by remember { mutableStateOf("") }
     var chapterScope by remember { mutableStateOf(false) }
@@ -92,18 +93,18 @@ internal fun SearchReplaceDialog(
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ModernChromeAction(
+                    ClayChromeAction(
                         "Capítulo actual", palette, "search_scope_chapter", selected = chapterScope,
                         description = "Buscar solo en el capítulo actual",
                     ) { chapterScope = true }
-                    ModernChromeAction(
+                    ClayChromeAction(
                         "Todo el libro", palette, "search_scope_book", selected = !chapterScope,
                         description = "Buscar en todo el libro",
                     ) { chapterScope = false }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Switch(ignoreCase, { ignoreCase = it }, modifier = Modifier.testTag("search_ignore_case"))
-                    Text("Ignorar mayúsculas y minúsculas", color = palette.inkSoft, fontSize = 12.sp)
+                    Text("Ignorar mayúsculas y minúsculas", color = palette.onSurfaceVariant, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -112,16 +113,16 @@ internal fun SearchReplaceDialog(
                     } else {
                         "${matches.size} coincidencia(s) en ${matches.map { it.pageNumber }.distinct().size} página(s)."
                     },
-                    color = palette.inkSoft,
+                    color = palette.onSurfaceVariant,
                     fontSize = 12.sp,
                     modifier = Modifier.testTag("search_result_summary"),
                 )
                 matches.take(40).forEachIndexed { index, match ->
                     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text("Pág. ${match.pageNumber} · ${match.chapterTitle}", color = palette.muted, fontSize = 11.sp)
+                        Text("Pág. ${match.pageNumber} · ${match.chapterTitle}", color = palette.textMuted, fontSize = 11.sp)
                         Text(
                             "…${match.snippetBefore}[${match.matchedText}]${match.snippetAfter}…",
-                            color = palette.ink,
+                            color = palette.onSurface,
                             fontSize = 12.sp,
                         )
                         TextButton(
@@ -135,7 +136,7 @@ internal fun SearchReplaceDialog(
                             modifier = Modifier.testTag("search_replace_single_$index"),
                         ) { Text("Reemplazar esta", fontSize = 12.sp) }
                     }
-                    HorizontalDivider(color = palette.border)
+                    HorizontalDivider(color = palette.outlineVariant)
                 }
             }
         },
@@ -160,7 +161,7 @@ internal fun SearchReplaceDialog(
 @Composable
 internal fun PageEditorDialog(
     repository: FolioRepository,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     book: BookDocument,
     onClose: () -> Unit,
     onStatus: (String) -> Unit,
@@ -168,7 +169,7 @@ internal fun PageEditorDialog(
     val state by repository.state.collectAsState()
     val liveBook = state.documents.find { it.id == book.id } ?: book
     val page = liveBook.pages.find { it.pageNumber == liveBook.currentPage } ?: liveBook.pages.firstOrNull() ?: return
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
     var chapterTitle by remember(page.pageNumber, page.chapterTitle) { mutableStateOf(page.chapterTitle) }
     var blocks by remember(page.pageNumber, page.blocks) { mutableStateOf(page.blocks) }
 
@@ -178,7 +179,7 @@ internal fun PageEditorDialog(
         title = { Text("Editar página ${page.pageNumber}") },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
-                Text("Los cambios se guardan en tu biblioteca; el archivo original no se modifica.", color = palette.inkSoft, fontSize = 12.sp)
+                Text("Los cambios se guardan en tu biblioteca; el archivo original no se modifica.", color = palette.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = chapterTitle,
@@ -191,9 +192,9 @@ internal fun PageEditorDialog(
                 Spacer(Modifier.height(8.dp))
                 blocks.forEachIndexed { index, block ->
                     if (block.style == BlockStyle.IMAGE) {
-                        Text("🖼 Ilustración: ${block.text}", color = palette.muted, fontSize = 12.sp)
+                        Text("🖼 Ilustración: ${block.text}", color = palette.textMuted, fontSize = 12.sp)
                     } else {
-                        Text("${block.style.name} #${index + 1}", color = palette.muted, fontSize = 11.sp)
+                        Text("${block.style.name} #${index + 1}", color = palette.textMuted, fontSize = 11.sp)
                         OutlinedTextField(
                             value = block.text,
                             onValueChange = { updated ->
@@ -233,7 +234,7 @@ internal fun PageEditorDialog(
 @Composable
 internal fun ChapterManagerDialog(
     repository: FolioRepository,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     book: BookDocument,
     onClose: () -> Unit,
     onStatus: (String) -> Unit,
@@ -241,7 +242,7 @@ internal fun ChapterManagerDialog(
     val state by repository.state.collectAsState()
     val liveBook = state.documents.find { it.id == book.id } ?: book
     val toc = liveBook.tableOfContents
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
     var editingStartPage by remember { mutableStateOf<Int?>(null) }
     var editText by remember { mutableStateOf("") }
 
@@ -251,7 +252,7 @@ internal fun ChapterManagerDialog(
         title = { Text("Capítulos (${toc.size})") },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                Text("Renombra, reordena o reconstruye el índice a partir de los títulos del contenido.", color = palette.inkSoft, fontSize = 12.sp)
+                Text("Renombra, reordena o reconstruye el índice a partir de los títulos del contenido.", color = palette.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
                 toc.forEachIndexed { index, entry ->
                     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("chapter_row_${entry.startPage}")) {
@@ -259,13 +260,13 @@ internal fun ChapterManagerDialog(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     entry.title.ifBlank { "Capítulo ${index + 1}" },
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
-                                Text("Pág. ${entry.startPage}", color = palette.muted, fontSize = 11.sp)
+                                Text("Pág. ${entry.startPage}", color = palette.textMuted, fontSize = 11.sp)
                             }
-                            ModernChromeAction(
+                            ClayChromeAction(
                                 "↑", palette, "chapter_move_up_${entry.startPage}", enabled = index > 0,
                                 description = "Mover capítulo arriba",
                             ) {
@@ -274,7 +275,7 @@ internal fun ChapterManagerDialog(
                                     onStatus("Capítulo movido hacia arriba.")
                                 }
                             }
-                            ModernChromeAction(
+                            ClayChromeAction(
                                 "↓", palette, "chapter_move_down_${entry.startPage}", enabled = index < toc.size - 1,
                                 description = "Mover capítulo abajo",
                             ) {
@@ -283,7 +284,7 @@ internal fun ChapterManagerDialog(
                                     onStatus("Capítulo movido hacia abajo.")
                                 }
                             }
-                            ModernChromeAction("Renombrar", palette, "chapter_rename_${entry.startPage}") {
+                            ClayChromeAction("Renombrar", palette, "chapter_rename_${entry.startPage}") {
                                 editingStartPage = entry.startPage
                                 editText = entry.title
                             }
@@ -316,7 +317,7 @@ internal fun ChapterManagerDialog(
                             }
                         }
                     }
-                    HorizontalDivider(color = palette.border)
+                    HorizontalDivider(color = palette.outlineVariant)
                 }
             }
         },
@@ -343,13 +344,13 @@ internal fun ChapterManagerDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun BookMetadataDialog(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     book: BookDocument,
     coverPicker: (((String) -> Unit) -> Unit)?,
     onSave: (title: String, author: String, language: String, coverImagePath: String?) -> Unit,
     onClose: () -> Unit,
 ) {
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
     var title by remember(book.id, book.title) { mutableStateOf(book.title) }
     var author by remember(book.id, book.author) { mutableStateOf(book.author) }
     var language by remember(book.id, book.language) { mutableStateOf(book.language) }
@@ -395,13 +396,13 @@ internal fun BookMetadataDialog(
                     colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("metadata_language_input"),
                 )
-                Text("Portada", color = palette.ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Portada", color = palette.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 if (bookImages.isEmpty() && coverPath.isNullOrBlank() && coverPicker == null) {
-                    Text("Este libro no tiene imágenes incrustadas disponibles para usar como portada.", color = palette.inkSoft, fontSize = 12.sp)
+                    Text("Este libro no tiene imágenes incrustadas disponibles para usar como portada.", color = palette.onSurfaceVariant, fontSize = 12.sp)
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     bookImages.forEachIndexed { index, path ->
-                        ModernChromeAction(
+                        ClayChromeAction(
                             "Imagen ${index + 1}", palette, "metadata_cover_pick_$index", selected = coverPath == path,
                             description = "Usar la imagen ${index + 1} del libro como portada",
                         ) { coverPath = path }
@@ -409,17 +410,17 @@ internal fun BookMetadataDialog(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (coverPicker != null) {
-                        ModernChromeAction("Elegir archivo…", palette, "metadata_cover_file_btn", description = "Elegir una imagen del dispositivo como portada") {
+                        ClayChromeAction("Elegir archivo…", palette, "metadata_cover_file_btn", description = "Elegir una imagen del dispositivo como portada") {
                             coverPicker { picked -> coverPath = picked }
                         }
                     }
                     if (!coverPath.isNullOrBlank()) {
-                        ModernChromeAction("Quitar portada", palette, "metadata_clear_cover_btn") { coverPath = null }
+                        ClayChromeAction("Quitar portada", palette, "metadata_clear_cover_btn") { coverPath = null }
                     }
                 }
                 Text(
                     "La exportación reescribe título, autor, idioma y portada en el archivo generado.",
-                    color = palette.inkSoft, fontSize = 11.5.sp,
+                    color = palette.onSurfaceVariant, fontSize = 11.5.sp,
                 )
             }
         },
@@ -440,7 +441,7 @@ internal fun BookMetadataDialog(
 @Composable
 internal fun ReattachAnnotationDialog(
     repository: FolioRepository,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     phraseId: String,
     onClose: () -> Unit,
     onStatus: (String) -> Unit,
@@ -459,9 +460,9 @@ internal fun ReattachAnnotationDialog(
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 if (phrase == null) {
-                    Text("La anotación ya no existe en tu cuaderno.", color = palette.inkSoft)
+                    Text("La anotación ya no existe en tu cuaderno.", color = palette.onSurfaceVariant)
                 } else {
-                    Text("«${phrase.phrase}»", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("«${phrase.phrase}»", color = palette.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(Modifier.height(6.dp))
                     when {
                         book == null -> Text(
@@ -473,13 +474,13 @@ internal fun ReattachAnnotationDialog(
                             color = palette.warningAmber, fontSize = 12.5.sp,
                         )
                         else -> {
-                            Text("Elige la ocurrencia correcta:", color = palette.inkSoft, fontSize = 12.sp)
+                            Text("Elige la ocurrencia correcta:", color = palette.onSurfaceVariant, fontSize = 12.sp)
                             matches.forEachIndexed { index, match ->
                                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                    Text("Pág. ${match.pageNumber} · ${match.chapterTitle}", color = palette.muted, fontSize = 11.sp)
+                                    Text("Pág. ${match.pageNumber} · ${match.chapterTitle}", color = palette.textMuted, fontSize = 11.sp)
                                     Text(
                                         "…${match.snippetBefore}[${match.matchedText}]${match.snippetAfter}…",
-                                        color = palette.ink, fontSize = 12.sp,
+                                        color = palette.onSurface, fontSize = 12.sp,
                                     )
                                     Button(
                                         onClick = {
@@ -496,7 +497,7 @@ internal fun ReattachAnnotationDialog(
                                         modifier = Modifier.heightIn(min = 48.dp).testTag("reattach_match_$index"),
                                     ) { Text("Reanclar aquí", fontSize = 12.sp) }
                                 }
-                                HorizontalDivider(color = palette.border)
+                                HorizontalDivider(color = palette.outlineVariant)
                             }
                         }
                     }
@@ -513,7 +514,7 @@ internal fun ReattachAnnotationDialog(
 
 @Composable
 internal fun BackupImportConfirmDialog(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     peek: BackupPeek,
     onConfirm: () -> Unit,
     onClose: () -> Unit,
@@ -524,15 +525,15 @@ internal fun BackupImportConfirmDialog(
         title = { Text("Restaurar respaldo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("El respaldo contiene:", color = palette.ink, fontSize = 13.sp)
-                Text("• ${peek.documentCount} libro(s) con huella verificable", color = palette.inkSoft, fontSize = 12.5.sp)
-                Text("• ${peek.phraseCount} anotación(es) y ${peek.collectionCount} colección(es)", color = palette.inkSoft, fontSize = 12.5.sp)
-                Text("• ${peek.reminderCount} recordatorio(s)", color = palette.inkSoft, fontSize = 12.5.sp)
+                Text("El respaldo contiene:", color = palette.onSurface, fontSize = 13.sp)
+                Text("• ${peek.documentCount} libro(s) con huella verificable", color = palette.onSurfaceVariant, fontSize = 12.5.sp)
+                Text("• ${peek.phraseCount} anotación(es) y ${peek.collectionCount} colección(es)", color = palette.onSurfaceVariant, fontSize = 12.5.sp)
+                Text("• ${peek.reminderCount} recordatorio(s)", color = palette.onSurfaceVariant, fontSize = 12.5.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "El progreso, las notas, los recordatorios y las preferencias se aplicarán a los libros presentes en este dispositivo. " +
                         "Los libros ausentes se informarán al terminar y tus datos actuales no se eliminan.",
-                    color = palette.inkSoft, fontSize = 12.sp,
+                    color = palette.onSurfaceVariant, fontSize = 12.sp,
                 )
             }
         },
@@ -552,7 +553,7 @@ internal fun BackupImportConfirmDialog(
 @Composable
 internal fun BackupPathDialog(
     title: String,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     onConfirm: (String) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -565,14 +566,14 @@ internal fun BackupPathDialog(
             Column {
                 Text(
                     "Escribe la ruta completa del archivo .json (por ejemplo, dentro de tu carpeta de Documentos).",
-                    color = palette.inkSoft, fontSize = 12.sp,
+                    color = palette.onSurfaceVariant, fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = path,
                     onValueChange = { path = it },
                     singleLine = true,
-                    colors = shioriOutlinedTextFieldColors(palette),
+                    colors = clayTextFieldColors(palette),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("backup_path_input"),
                 )
             }

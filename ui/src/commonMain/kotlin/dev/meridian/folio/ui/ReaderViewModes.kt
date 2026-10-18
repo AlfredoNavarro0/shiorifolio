@@ -60,6 +60,7 @@ import dev.meridian.folio.core.PdfPageColorMode
 import dev.meridian.folio.core.PdfReflowEngine
 import dev.meridian.folio.core.ReflowedBlockItem
 import dev.meridian.folio.core.SavedPhrase
+import dev.meridian.folio.ui.theme.*
 import kotlin.math.roundToInt
 
 /**
@@ -80,7 +81,7 @@ internal fun computeScaledMaxSpreadWidth(
  */
 @Composable
 internal fun ZoomAndFitControlStrip(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     fitMode: PageFitMode,
     zoomScale: Float,
     onSelectFitMode: (PageFitMode) -> Unit,
@@ -92,8 +93,8 @@ internal fun ZoomAndFitControlStrip(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(palette.pillBg)
-            .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+            .background(palette.surfaceContainerHigh)
+            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 3.dp)
             .testTag("zoom_fit_control_strip"),
     ) {
@@ -101,8 +102,8 @@ internal fun ZoomAndFitControlStrip(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(5.dp))
-                .background(if (fitPageSelected) palette.accentGreen else androidx.compose.ui.graphics.Color.Transparent)
-                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .background(if (fitPageSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
+                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
                     onSelectFitMode(PageFitMode.FIT_PAGE)
                 }
                 .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -110,7 +111,7 @@ internal fun ZoomAndFitControlStrip(
         ) {
             Text(
                 text = "Ajustar Pág.",
-                color = if (fitPageSelected) palette.onAccent else palette.inkSoft,
+                color = if (fitPageSelected) palette.onPrimary else palette.onSurfaceVariant,
                 fontSize = 10.sp,
                 fontWeight = if (fitPageSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
@@ -120,8 +121,8 @@ internal fun ZoomAndFitControlStrip(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(5.dp))
-                .background(if (fitWidthSelected) palette.accentGreen else androidx.compose.ui.graphics.Color.Transparent)
-                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .background(if (fitWidthSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
+                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
                     onSelectFitMode(PageFitMode.FIT_WIDTH)
                 }
                 .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -129,29 +130,29 @@ internal fun ZoomAndFitControlStrip(
         ) {
             Text(
                 text = "Ajustar Ancho",
-                color = if (fitWidthSelected) palette.onAccent else palette.inkSoft,
+                color = if (fitWidthSelected) palette.onPrimary else palette.onSurfaceVariant,
                 fontSize = 10.sp,
                 fontWeight = if (fitWidthSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
         }
 
-        Text("|", color = palette.border, fontSize = 10.sp)
+        Text("|", color = palette.outlineVariant, fontSize = 10.sp)
 
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(5.dp))
-                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
                     onChangeZoomScale((zoomScale - 0.10f).coerceIn(0.50f, 2.50f))
                 }
                 .padding(horizontal = 5.dp, vertical = 2.dp)
                 .testTag("zoom_decrease_btn"),
         ) {
-            Text("−", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text("−", color = palette.onSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
 
         Text(
             text = "${(zoomScale * 100).roundToInt()}%",
-            color = if (fitMode == PageFitMode.MANUAL_ZOOM) palette.accentGreen else palette.ink,
+            color = if (fitMode == PageFitMode.MANUAL_ZOOM) palette.primary else palette.onSurface,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,
             fontSize = 10.sp,
@@ -164,13 +165,13 @@ internal fun ZoomAndFitControlStrip(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(5.dp))
-                .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
                     onChangeZoomScale((zoomScale + 0.10f).coerceIn(0.50f, 2.50f))
                 }
                 .padding(horizontal = 5.dp, vertical = 2.dp)
                 .testTag("zoom_increase_btn"),
         ) {
-            Text("+", color = palette.ink, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text("+", color = palette.onSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
     }
 }
@@ -181,7 +182,7 @@ internal fun ZoomAndFitControlStrip(
  */
 @Composable
 internal fun VerticalPaginatedReaderCanvas(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     savedPhrases: List<SavedPhrase>,
@@ -196,7 +197,7 @@ internal fun VerticalPaginatedReaderCanvas(
     val page = book.pages.firstOrNull { it.pageNumber == book.currentPage } ?: book.pages.first()
     val effectiveFontSize = (fontSizePt * zoomScale.coerceIn(0.70f, 1.80f)).coerceIn(12f, 34f)
     val pagination = LocalReaderPagination.current
-    Surface(color = palette.pageSurface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, palette.border),
+    Surface(color = palette.surfaceContainerLowest, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, palette.outlineVariant),
         modifier = modifier.fillMaxSize().testTag("vertical_paginated_canvas")
             .readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) }) {
         StitchBookSpreadLeaf(palette, pdfPageColorMode, book, page, savedPhrases, effectiveFontSize,
@@ -212,7 +213,7 @@ internal fun VerticalPaginatedReaderCanvas(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun VerticalContinuousReaderCanvas(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     savedPhrases: List<SavedPhrase>,
@@ -242,9 +243,9 @@ internal fun VerticalContinuousReaderCanvas(
     val paraSpacing = bookTypography.paragraphSpacingDp.coerceIn(4f, 32f).dp
 
     Surface(
-        color = palette.pageSurface,
+        color = palette.surfaceContainerLowest,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(1.dp, palette.outlineVariant),
         modifier = modifier
             .fillMaxSize()
             .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp))
@@ -304,7 +305,7 @@ internal fun VerticalContinuousReaderCanvas(
  */
 @Composable
 internal fun AdaptiveReflowReaderCanvas(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -335,9 +336,9 @@ internal fun AdaptiveReflowReaderCanvas(
     val paraSpacing = bookTypography.paragraphSpacingDp.coerceIn(4f, 32f).dp
 
     Surface(
-        color = palette.pageSurface,
+        color = palette.surfaceContainerLowest,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(1.dp, palette.outlineVariant),
         modifier = modifier
             .fillMaxSize()
             .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp))
@@ -360,7 +361,7 @@ internal fun AdaptiveReflowReaderCanvas(
                 ) {
                     Text(
                         text = "${page.chapterTitle.uppercase()} · MODO TEXTO ADAPTABLE",
-                        color = palette.accentGreen,
+                        color = palette.primary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.4.sp,
@@ -370,14 +371,14 @@ internal fun AdaptiveReflowReaderCanvas(
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "FOLIO ${page.pageNumber}",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 10.sp,
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider(color = palette.border.copy(alpha = 0.7f), thickness = 1.dp)
+                HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.7f), thickness = 1.dp)
             }
 
             // Reliability & OCR Status Banner
@@ -396,9 +397,9 @@ internal fun AdaptiveReflowReaderCanvas(
 
             if (reconstruction.items.isEmpty()) {
                 Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Esta página no contiene texto extraíble. Puedes reconocer el texto o volver al documento original.", color = palette.inkSoft)
-                    ModernChromeAction("Reconocer texto", palette, "pdf_ocr_empty_page_btn") { onRunOcrOnPage(page.pageNumber) }
-                    ModernChromeAction("Volver a Vista Original", palette, "reflow_empty_original_btn", onClick = onReturnToOriginalView)
+                    Text("Esta página no contiene texto extraíble. Puedes reconocer el texto o volver al documento original.", color = palette.onSurfaceVariant)
+                    ClayChromeAction("Reconocer texto", palette, "pdf_ocr_empty_page_btn") { onRunOcrOnPage(page.pageNumber) }
+                    ClayChromeAction("Volver a Vista Original", palette, "reflow_empty_original_btn", onClick = onReturnToOriginalView)
                 }
             } else {
                 val reflowPage = remember(page, reconstruction.items) {
@@ -410,7 +411,7 @@ internal fun AdaptiveReflowReaderCanvas(
             }
             // Bottom Footer
             Column(modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider(color = palette.border.copy(alpha = 0.65f), thickness = 1.dp)
+                HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.65f), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -419,13 +420,13 @@ internal fun AdaptiveReflowReaderCanvas(
                 ) {
                     Text(
                         text = "Texto Adaptable • Archivo original intacto (${page.wordCount} palabras)",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontStyle = FontStyle.Italic,
                         fontSize = 10.5.sp,
                     )
                     Text(
                         text = "${page.pageNumber} / ${book.totalPages}",
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
@@ -438,7 +439,7 @@ internal fun AdaptiveReflowReaderCanvas(
 
 @Composable
 internal fun ReflowStatusAndReliabilityBanner(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     book: BookDocument,
     currentPage: Int,
     isReliable: Boolean,
@@ -452,9 +453,9 @@ internal fun ReflowStatusAndReliabilityBanner(
     if (book.format != DocumentFormat.PDF && reliabilityWarning == null && mergedPageBreaks == 0) return
 
     Surface(
-        color = if (!isReliable) palette.warningAmber.copy(alpha = 0.14f) else palette.elevatedSurface,
+        color = if (!isReliable) palette.warningAmber.copy(alpha = 0.14f) else palette.surfaceSecondary,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, if (!isReliable) palette.warningAmber else palette.border),
+        border = BorderStroke(1.dp, if (!isReliable) palette.warningAmber else palette.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp, bottom = 4.dp)
@@ -471,7 +472,7 @@ internal fun ReflowStatusAndReliabilityBanner(
                 Text(
                     text = reliabilityWarning
                         ?: "Flujo continuo reconstruido (saltos de página unidos: $mergedPageBreaks · guiones unidos: $dehyphenatedWords · archivo original preservado).",
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontSize = 11.5.sp,
                     fontWeight = if (!isReliable) FontWeight.SemiBold else FontWeight.Normal,
                 )
@@ -485,9 +486,9 @@ internal fun ReflowStatusAndReliabilityBanner(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) {
+                            .background(palette.surfaceContainerHigh)
+                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
+                            .clayFocusableClickable(palette, RoundedCornerShape(6.dp)) {
                                 onRunOcrOnPage(currentPage)
                             }
                             .padding(horizontal = 9.dp, vertical = 4.dp)
@@ -495,7 +496,7 @@ internal fun ReflowStatusAndReliabilityBanner(
                     ) {
                         Text(
                             text = if (scannedPageNumbers.isNotEmpty()) "🔍 OCR Pág. $currentPage" else "OCR",
-                            color = palette.accentGreen,
+                            color = palette.primary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -504,8 +505,8 @@ internal fun ReflowStatusAndReliabilityBanner(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(palette.accentGreen)
-                            .shioriFocusableClickable(palette, RoundedCornerShape(6.dp)) {
+                            .background(palette.primary)
+                            .clayFocusableClickable(palette, RoundedCornerShape(6.dp)) {
                                 onReturnToOriginalView()
                             }
                             .padding(horizontal = 10.dp, vertical = 4.dp)
@@ -513,7 +514,7 @@ internal fun ReflowStatusAndReliabilityBanner(
                     ) {
                         Text(
                             text = "Volver a Vista Original",
-                            color = palette.onAccent,
+                            color = palette.onPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -527,7 +528,7 @@ internal fun ReflowStatusAndReliabilityBanner(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReflowBlockItemView(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     item: ReflowedBlockItem,
@@ -552,14 +553,14 @@ private fun ReflowBlockItemView(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.border))
+            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.outlineVariant))
             Text(
                 text = "  ✦  ✦  ✦  ",
                 color = palette.warningAmber,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.border))
+            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.outlineVariant))
         }
         return
     }
@@ -597,7 +598,7 @@ private fun ReflowBlockItemView(
         return
     }
 
-    val annotated = remember(item.text, pagePhrases, palette.isDark) {
+    val annotated = remember(item.text, pagePhrases, palette.isDarkReading) {
         buildHighlightedAnnotatedString(item.text, pagePhrases, palette)
     }
 
@@ -623,7 +624,7 @@ private fun ReflowBlockItemView(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = annotated,
-                            color = palette.ink,
+                            color = palette.onSurface,
                             fontFamily = contentFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = (fontSizeSp + 4f).sp,
@@ -634,14 +635,14 @@ private fun ReflowBlockItemView(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(5.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(5.dp))
+                                .background(palette.surfaceContainerHigh)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
                                 .clickable { onSelectSourcePage() }
                                 .padding(horizontal = 7.dp, vertical = 2.dp),
                         ) {
                             Text(
                                 text = "p.${item.sourcePageNumber}",
-                                color = palette.muted,
+                                color = palette.textMuted,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 10.sp,
                             )
@@ -656,7 +657,7 @@ private fun ReflowBlockItemView(
                     Spacer(modifier = Modifier.width(14.dp))
                     Text(
                         text = annotated,
-                        color = palette.inkSoft,
+                        color = palette.onSurfaceVariant,
                         fontFamily = contentFontFamily,
                         fontStyle = FontStyle.Italic,
                         fontSize = fontSizeSp.sp,
@@ -671,13 +672,13 @@ private fun ReflowBlockItemView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(palette.elevatedSurface)
-                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                        .background(palette.surfaceSecondary)
+                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                         .padding(12.dp),
                 ) {
                     Text(
                         text = annotated,
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = contentFontFamily,
                         fontSize = (fontSizeSp - 1f).sp,
                         lineHeight = (lineHeightSp - 2f).sp,
@@ -689,7 +690,7 @@ private fun ReflowBlockItemView(
             BlockStyle.PARAGRAPH, BlockStyle.IMAGE -> {
                 Text(
                     text = annotated,
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontFamily = contentFontFamily,
                     fontSize = fontSizeSp.sp,
                     lineHeight = lineHeightSp.sp,
@@ -712,14 +713,14 @@ private fun ReflowBlockItemView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(
-                                if (alreadySaved) palette.highlightColor(HighlightTone.SAGE) else palette.pillBg.copy(alpha = 0.7f),
+                                if (alreadySaved) palette.highlightColor(HighlightTone.SAGE) else palette.surfaceContainerHigh.copy(alpha = 0.7f),
                             )
                             .clickable { onQuickSavePhrase(candidate, item.text) }
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Text(
                             text = if (alreadySaved) "✓ $candidate" else "+ $candidate",
-                            color = palette.inkSoft,
+                            color = palette.onSurfaceVariant,
                             fontSize = 9.5.sp,
                         )
                     }

@@ -16,12 +16,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.*
+import dev.meridian.folio.ui.theme.*
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LibraryControls(
     state: FolioPersistedState,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     filter: LibraryFilter,
     resultCount: Int,
     onFilter: (LibraryFilter) -> Unit,
@@ -36,39 +37,39 @@ internal fun LibraryControls(
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f).widthIn(min = 230.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Tu biblioteca", color = palette.ink, fontFamily = FontFamily.SansSerif, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
-                    Surface(color = palette.accentGreen.copy(alpha = 0.08f), shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, palette.accentGreen.copy(alpha = 0.2f))) {
-                        Text("$resultCount / ${state.documents.size} volúmenes", color = palette.accentGreen,
+                    Text("Tu biblioteca", color = palette.onSurface, fontFamily = FontFamily.SansSerif, fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp)
+                    Surface(color = palette.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, palette.primary.copy(alpha = 0.2f))) {
+                        Text("$resultCount / ${state.documents.size} volúmenes", color = palette.primary,
                             fontFamily = FontFamily.SansSerif, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).testTag("library_count"))
                     }
                 }
-                Text("Tu próxima lectura empieza aquí.", color = palette.inkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                if (state.documents.isEmpty()) Text("shiorifolio", color = palette.ink, fontFamily = FontFamily.Serif)
+                Text("Tu próxima lectura empieza aquí.", color = palette.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                if (state.documents.isEmpty()) Text("shiorifolio", color = palette.onSurface, fontFamily = FontFamily.Serif)
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onTools, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(
-                    containerColor = palette.accentGreen, contentColor = palette.onAccent), modifier = Modifier.testTag("library_tools")) {
+                    containerColor = palette.primary, contentColor = palette.onPrimary), modifier = Modifier.testTag("library_tools")) {
                     Text("+  Importar libro", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
                 LibraryToolbarButton("Filtros y orden", "library_filters", palette, onClick = onFilters)
                 LibraryToolbarButton("Seleccionar", "library_select_all", palette, onClick = onSelectAll)
             }
         }
-        Surface(color = palette.paper, shape = RoundedCornerShape(16.dp)) {
+        Surface(color = palette.canvas, shape = RoundedCornerShape(16.dp)) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val search: @Composable (Modifier) -> Unit = { modifier ->
                     OutlinedTextField(filter.search, { onFilter(filter.copy(search = it)) },
                         placeholder = { Text("Buscar por título o autor…", fontSize = 12.sp) }, singleLine = true,
-                        leadingIcon = { Text("⌕", color = palette.inkSoft, fontSize = 24.sp) },
+                        leadingIcon = { Text("⌕", color = palette.onSurfaceVariant, fontSize = 24.sp) },
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = palette.pageSurface,
-                            focusedContainerColor = palette.pageSurface, unfocusedBorderColor = palette.border, focusedBorderColor = palette.accentGreen),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = palette.surfaceContainerLowest,
+                            focusedContainerColor = palette.surfaceContainerLowest, unfocusedBorderColor = palette.outlineVariant, focusedBorderColor = palette.primary),
                         modifier = modifier.shioriTextFieldFocusGuard().testTag("library_search"))
                 }
                 val views: @Composable () -> Unit = {
-                    Row(Modifier.horizontalScroll(rememberScrollState()).background(palette.elevatedSurface, RoundedCornerShape(12.dp)).padding(3.dp),
+                    Row(Modifier.horizontalScroll(rememberScrollState()).background(palette.surfaceSecondary, RoundedCornerShape(12.dp)).padding(3.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         LibraryLayout.entries.forEach { layout ->
                             LibraryToolbarButton(if (layout == LibraryLayout.CARDS) "Pósteres" else "Lista", "library_layout_${layout.name}", palette, prefs.layout == layout) {
@@ -114,9 +115,9 @@ internal fun LibraryControls(
 }
 
 @Composable
-private fun LibraryToolbarButton(text: String, tag: String, palette: MeridianPalette, selected: Boolean = false, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = if (selected) palette.accentGreen.copy(alpha = 0.12f) else palette.paper.copy(alpha = 0f),
-        contentColor = if (selected) palette.accentGreen else palette.inkSoft,
+private fun LibraryToolbarButton(text: String, tag: String, palette: ClayPalette, selected: Boolean = false, onClick: () -> Unit) {
+    Surface(onClick = onClick, color = if (selected) palette.primary.copy(alpha = 0.12f) else palette.canvas.copy(alpha = 0f),
+        contentColor = if (selected) palette.primary else palette.onSurfaceVariant,
         shape = RoundedCornerShape(12.dp), border = null,
         modifier = Modifier.heightIn(min = 48.dp).testTag(tag)) {
         Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {

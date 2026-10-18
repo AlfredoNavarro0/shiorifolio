@@ -16,11 +16,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.*
+import dev.meridian.folio.ui.theme.*
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsAndShortcutsWorkspaceView(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     theme: ReaderTheme,
     pdfPageColorMode: PdfPageColorMode,
     currentBook: BookDocument,
@@ -54,21 +55,21 @@ internal fun SettingsAndShortcutsWorkspaceView(
                 SettingsGroup("Tema", "Elige el ambiente de tu biblioteca y del lector.", palette, "settings_theme_card") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ReaderTheme.entries.forEach { value ->
-                            ModernChromeAction(value.stitchLabel, palette, "settings_theme_${value.name}", value == theme) { onSelectTheme(value) }
+                            ClayChromeAction(value.stitchLabel, palette, "settings_theme_${value.name}", value == theme) { onSelectTheme(value) }
                         }
                     }
                 }
                 SettingsGroup("Interfaz", "Texto y tamaño de los menús y controles.", palette, "settings_ui_appearance_card") {
                     SettingsRow("Tipografía", palette) {
                         UiFontFamilyOption.entries.forEach { value ->
-                            ModernChromeAction(value.label, palette, "ui_font_family_${value.name}", value == uiAppearance.fontFamily) {
+                            ClayChromeAction(value.label, palette, "ui_font_family_${value.name}", value == uiAppearance.fontFamily) {
                                 onUpdateUiAppearance { it.copy(fontFamily = value) }
                             }
                         }
                     }
                     SettingsRow("Peso del texto", palette) {
                         UiFontWeightOption.entries.forEach { value ->
-                            ModernChromeAction(value.label, palette, "ui_font_weight_${value.name}", value == uiAppearance.fontWeight) {
+                            ClayChromeAction(value.label, palette, "ui_font_weight_${value.name}", value == uiAppearance.fontWeight) {
                                 onUpdateUiAppearance { it.copy(fontWeight = value) }
                             }
                         }
@@ -95,24 +96,24 @@ internal fun SettingsAndShortcutsWorkspaceView(
                 SettingsGroup("Lectura", "Personaliza cómo se distribuye el contenido en las páginas.", palette, "settings_book_typography_card") {
                     if (currentBook.format == DocumentFormat.PDF) {
                         SettingsRow("Contenido PDF", palette) {
-                            ModernChromeAction("Original", palette, "settings_pdf_original_mode_btn", originalPdf) { onUpdateBookTypography { it.copy(pdfPreferReflowText = false) } }
-                            ModernChromeAction("Texto adaptable", palette, "settings_pdf_reflow_mode_btn", !originalPdf) { onUpdateBookTypography { it.copy(pdfPreferReflowText = true) } }
+                            ClayChromeAction("Original", palette, "settings_pdf_original_mode_btn", originalPdf) { onUpdateBookTypography { it.copy(pdfPreferReflowText = false) } }
+                            ClayChromeAction("Texto adaptable", palette, "settings_pdf_reflow_mode_btn", !originalPdf) { onUpdateBookTypography { it.copy(pdfPreferReflowText = true) } }
                         }
                     }
                     if (originalPdf) {
                         Text("El PDF original conserva sus fuentes y su distribución. Activa Texto adaptable para personalizar la tipografía.",
-                            color = palette.inkSoft, fontSize = 13.sp, modifier = Modifier.testTag("pdf_original_typography_notice"))
+                            color = palette.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.testTag("pdf_original_typography_notice"))
                     } else {
                         SettingsRow("Fuente del libro", palette) {
                             BookFontFamilyOption.entries.forEach { value ->
-                                ModernChromeAction(value.shortLabel, palette, "book_font_family_${value.name}", value == bookTypography.fontFamily) {
+                                ClayChromeAction(value.shortLabel, palette, "book_font_family_${value.name}", value == bookTypography.fontFamily) {
                                     onUpdateBookTypography { it.copy(fontFamily = value) }
                                 }
                             }
                         }
                         SettingsRow("Alineación", palette) {
                             BookTextAlignment.entries.forEach { value ->
-                                ModernChromeAction(value.shortLabel, palette, "book_text_align_${value.name}", value == bookTypography.textAlignment) {
+                                ClayChromeAction(value.shortLabel, palette, "book_text_align_${value.name}", value == bookTypography.textAlignment) {
                                     onUpdateBookTypography { it.copy(textAlignment = value) }
                                 }
                             }
@@ -146,7 +147,7 @@ internal fun SettingsAndShortcutsWorkspaceView(
                     }
                     SettingsRow("Color de páginas PDF", palette) {
                         PdfPageColorMode.entries.forEach { value ->
-                            ModernChromeAction(value.shortLabel, palette, "settings_pdf_color_${value.name}", value == pdfPageColorMode) { onSelectPdfColorMode(value) }
+                            ClayChromeAction(value.shortLabel, palette, "settings_pdf_color_${value.name}", value == pdfPageColorMode) { onSelectPdfColorMode(value) }
                         }
                     }
                     TextButton(onResetBookTypography, modifier = Modifier.testTag("reset_book_typography_btn")) { Text("Restablecer lectura") }
@@ -154,20 +155,20 @@ internal fun SettingsAndShortcutsWorkspaceView(
             }
             "shortcuts" -> SettingsGroup("Atajos de teclado", "Selecciona Cambiar y pulsa la nueva combinación. Esc cancela la captura.", palette, "settings_shortcuts_card") {
                 if (rebindingAction != null) {
-                    Surface(color = palette.accentGreen.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp), modifier = Modifier.testTag("rebind_prompt_banner")) {
+                    Surface(color = palette.primary.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp), modifier = Modifier.testTag("rebind_prompt_banner")) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Text("Pulsa el nuevo atajo: ${rebindingAction.label}", color = palette.ink)
+                            Text("Pulsa el nuevo atajo: ${rebindingAction.label}", color = palette.onSurface)
                             TextButton(onCancelRebind, modifier = Modifier.testTag("cancel_rebind_btn")) { Text("Cancelar") }
                         }
                     }
                 }
                 ReaderAction.entries.forEach { action ->
                     SettingsRow(action.label, palette) {
-                        Surface(color = palette.pillBg, shape = RoundedCornerShape(8.dp)) {
-                            Text((keyBindings[action] ?: action.defaultSpec).displayLabel(), color = palette.ink,
+                        Surface(color = palette.surfaceContainerHigh, shape = RoundedCornerShape(8.dp)) {
+                            Text((keyBindings[action] ?: action.defaultSpec).displayLabel(), color = palette.onSurface,
                                 modifier = Modifier.padding(10.dp).testTag("shortcut_badge_${action.name}"), fontSize = 12.sp)
                         }
-                        ModernChromeAction(if (rebindingAction == action) "Cancelar" else "Cambiar", palette, "rebind_action_${action.name}") {
+                        ClayChromeAction(if (rebindingAction == action) "Cancelar" else "Cambiar", palette, "rebind_action_${action.name}") {
                             if (rebindingAction == action) onCancelRebind() else onStartRebind(action)
                         }
                     }
@@ -183,25 +184,25 @@ internal fun SettingsAndShortcutsWorkspaceView(
                 ) {
                     SettingsRow("Copia de seguridad", palette) {
                         if (onExportBackup != null) {
-                            ModernChromeAction("Exportar respaldo", palette, "backup_export_btn") { onExportBackup() }
+                            ClayChromeAction("Exportar respaldo", palette, "backup_export_btn") { onExportBackup() }
                         }
                         if (onImportBackup != null) {
-                            ModernChromeAction("Importar respaldo", palette, "backup_import_btn") { onImportBackup() }
+                            ClayChromeAction("Importar respaldo", palette, "backup_import_btn") { onImportBackup() }
                         }
                     }
                     Text(
                         "Los libros se reasocian por huella de contenido al importar: el progreso vuelve a su sitio aunque el archivo esté en otra carpeta. " +
                             "Los libros ausentes se informan al terminar y nunca se elimina nada de lo que ya tienes.",
-                        color = palette.inkSoft,
+                        color = palette.onSurfaceVariant,
                         fontSize = 12.sp,
                     )
                     if (dataStatusMessage != null) {
                         Surface(
-                            color = palette.pillBg,
+                            color = palette.surfaceContainerHigh,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth().testTag("data_status_message"),
                         ) {
-                            Text(dataStatusMessage, color = palette.ink, fontSize = 12.5.sp, modifier = Modifier.padding(12.dp))
+                            Text(dataStatusMessage, color = palette.onSurface, fontSize = 12.5.sp, modifier = Modifier.padding(12.dp))
                         }
                     }
                 }
@@ -214,7 +215,7 @@ internal fun SettingsAndShortcutsWorkspaceView(
                     Text(
                         "ShioriFolio valida por sí mismo la estructura del EPUB generado (manifiesto, índice y referencias). " +
                             "Si tienes epubcheck instalado, además se ejecuta esa comprobación externa sin bloquear nada si no está disponible.",
-                        color = palette.inkSoft,
+                        color = palette.onSurfaceVariant,
                         fontSize = 12.sp,
                     )
                 }
@@ -224,12 +225,12 @@ internal fun SettingsAndShortcutsWorkspaceView(
 }
 
 @Composable
-private fun SettingsShell(palette: MeridianPalette, selected: String, onSelect: (String) -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsShell(palette: ClayPalette, selected: String, onSelect: (String) -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val categories = listOf("appearance" to "Apariencia", "reading" to "Lectura", "shortcuts" to "Atajos", "data" to "Datos")
-    Column(Modifier.fillMaxSize().background(palette.paper).padding(24.dp).testTag("settings_workspace_view"), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().background(palette.canvas).padding(24.dp).testTag("settings_workspace_view"), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Column {
-            Text("Ajustes", color = palette.ink, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text("Tu espacio de lectura, a tu manera.", color = palette.inkSoft, fontSize = 13.sp)
+            Text("Ajustes", color = palette.onSurface, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("Tu espacio de lectura, a tu manera.", color = palette.onSurfaceVariant, fontSize = 13.sp)
         }
         BoxWithConstraints(Modifier.weight(1f)) {
             val panel: @Composable (Modifier) -> Unit = { modifier ->
@@ -240,9 +241,9 @@ private fun SettingsShell(palette: MeridianPalette, selected: String, onSelect: 
             if (maxWidth >= 760.dp) Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(Modifier.width(180.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     categories.forEach { (id, label) ->
-                        Surface(onClick = { onSelect(id) }, color = if (selected == id) palette.accentGreen else palette.paper,
+                        Surface(onClick = { onSelect(id) }, color = if (selected == id) palette.primary else palette.canvas,
                             shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().testTag("settings_category_$id")) {
-                            Text(label, color = if (selected == id) palette.onAccent else palette.inkSoft,
+                            Text(label, color = if (selected == id) palette.onPrimary else palette.onSurfaceVariant,
                                 fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(16.dp))
                         }
                     }
@@ -250,7 +251,7 @@ private fun SettingsShell(palette: MeridianPalette, selected: String, onSelect: 
                 panel(Modifier.weight(1f).fillMaxHeight())
             } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                    categories.forEach { (id, label) -> ModernChromeAction(label, palette, "settings_category_$id", selected == id) { onSelect(id) } }
+                    categories.forEach { (id, label) -> ClayChromeAction(label, palette, "settings_category_$id", selected == id) { onSelect(id) } }
                 }
                 panel(Modifier.weight(1f).fillMaxWidth())
             }
@@ -259,12 +260,12 @@ private fun SettingsShell(palette: MeridianPalette, selected: String, onSelect: 
 }
 
 @Composable
-private fun SettingsGroup(title: String, subtitle: String, palette: MeridianPalette, tag: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = palette.pageSurface, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, palette.border), modifier = Modifier.fillMaxWidth().testTag(tag)) {
+private fun SettingsGroup(title: String, subtitle: String, palette: ClayPalette, tag: String, content: @Composable ColumnScope.() -> Unit) {
+    Surface(color = palette.surfaceContainerLowest, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, palette.outlineVariant), modifier = Modifier.fillMaxWidth().testTag(tag)) {
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = palette.inkSoft, fontSize = 12.sp)
+                Text(title, color = palette.onSurface, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = palette.onSurfaceVariant, fontSize = 12.sp)
             }
             content()
         }
@@ -273,15 +274,15 @@ private fun SettingsGroup(title: String, subtitle: String, palette: MeridianPale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsRow(label: String, palette: MeridianPalette, controls: @Composable FlowRowScope.() -> Unit) {
+private fun SettingsRow(label: String, palette: ClayPalette, controls: @Composable FlowRowScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        HorizontalDivider(color = palette.border.copy(alpha = 0.6f))
+        HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.6f))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             if (maxWidth >= 540.dp) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(label, color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                Text(label, color = palette.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 FlowRow(Modifier.widthIn(max = 370.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), content = controls)
             } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(label, color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(label, color = palette.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), content = controls)
             }
         }
@@ -289,10 +290,10 @@ private fun SettingsRow(label: String, palette: MeridianPalette, controls: @Comp
 }
 
 @Composable
-private fun SettingsStepper(value: String, tag: String, palette: MeridianPalette, onDecrease: () -> Unit, onIncrease: () -> Unit) {
-    Row(Modifier.background(palette.pillBg, RoundedCornerShape(10.dp)), verticalAlignment = Alignment.CenterVertically) {
-        ModernChromeAction("−", palette, "${tag}_dec_btn", description = "Disminuir $tag", onClick = onDecrease)
-        Text(value, color = palette.ink, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp).testTag("${tag}_label"))
-        ModernChromeAction("+", palette, "${tag}_inc_btn", description = "Aumentar $tag", onClick = onIncrease)
+private fun SettingsStepper(value: String, tag: String, palette: ClayPalette, onDecrease: () -> Unit, onIncrease: () -> Unit) {
+    Row(Modifier.background(palette.surfaceContainerHigh, RoundedCornerShape(10.dp)), verticalAlignment = Alignment.CenterVertically) {
+        ClayChromeAction("−", palette, "${tag}_dec_btn", description = "Disminuir $tag", onClick = onDecrease)
+        Text(value, color = palette.onSurface, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp).testTag("${tag}_label"))
+        ClayChromeAction("+", palette, "${tag}_inc_btn", description = "Aumentar $tag", onClick = onIncrease)
     }
 }

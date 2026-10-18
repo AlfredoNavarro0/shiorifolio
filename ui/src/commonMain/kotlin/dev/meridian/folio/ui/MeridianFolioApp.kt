@@ -37,7 +37,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -119,6 +118,7 @@ import dev.meridian.folio.core.SavedPhrase
 import dev.meridian.folio.core.UiAppearanceSettings
 import dev.meridian.folio.core.UiFontFamilyOption
 import dev.meridian.folio.core.UiFontWeightOption
+import dev.meridian.folio.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -172,8 +172,8 @@ fun MeridianFolioApp(
     LibraryFolderEffects(repository)
     val uiAppearance = state.uiAppearance
     val bookTypography = state.bookTypography
-    val palette = MeridianDesign.paletteFor(state.theme, uiAppearance.highContrastText)
-    val materialColorScheme = remember(state.theme, uiAppearance.highContrastText) { palette.toMaterialColorScheme() }
+    // The clay chrome is always the light lavender canvas; only the reading sheet follows state.theme.
+    val palette = ClayTokens.chrome(uiAppearance.highContrastText)
     val currentBook = state.documents.find { it.id == state.selectedBookId } ?: state.documents.firstOrNull()
 
     var activeSection by remember { mutableStateOf(MeridianSection.READER) }
@@ -227,12 +227,11 @@ fun MeridianFolioApp(
     CompositionLocalProvider(
         LocalDensity provides scaledDensity,
         LocalReaderPagination provides readerPagination,
-        LocalModernUiAppearance provides uiAppearance,
         LocalTextFieldFocusTracker provides { gained ->
             focusedTextFieldCount = (focusedTextFieldCount + if (gained) 1 else -1).coerceAtLeast(0)
         },
     ) {
-        MaterialTheme(colorScheme = materialColorScheme) {
+        ClayTheme(palette = palette, uiAppearance = uiAppearance) {
             if (currentBook == null) {
                 Box(Modifier.fillMaxSize().testTag("meridian_root")) {
                     LibraryWorkspace(repository, palette,
@@ -240,7 +239,7 @@ fun MeridianFolioApp(
                         onCreated = { activeSection = MeridianSection.READER },
                         onPickFolder = onPickFolder, onPickFile = onPickFileToImport, onPickExport = onPickFileToExport)
                 }
-                return@MaterialTheme
+                return@ClayTheme
             }
 
             val bookTelemetry = state.telemetry[currentBook.id]
@@ -364,7 +363,7 @@ fun MeridianFolioApp(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(palette.paper)
+                    .background(palette.canvas)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
@@ -720,6 +719,7 @@ fun MeridianFolioApp(
                             }
                         },
                         onSelectSection = { activeSection = it },
+                        activeSection = activeSection,
                         onOpenFileDialog = onOpenFileDialog,
                         onSwitchToDesktopView = { forceMobileKindleLayout = false },
                     )
@@ -782,20 +782,20 @@ fun MeridianFolioApp(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(palette.pillBg)
+                                    .background(palette.surfaceContainerHigh)
                                     .padding(horizontal = 24.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
                                     text = statusBannerMessage ?: "",
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                 )
                                 Text(
                                     text = "Cerrar",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontSize = 11.5.sp,
                                     modifier = Modifier.clickable { statusBannerMessage = null },
                                 )
@@ -1023,7 +1023,10 @@ fun MeridianFolioApp(
                             }
                         }
 
-
+                        // 5. CLAY FOOTER (hidden with the rest of the chrome in Zen Mode)
+                        if (!isZenControlsHidden) {
+                            ClayFooter(state.documents.size)
+                        }
                     }
                 }
             }
@@ -1037,7 +1040,7 @@ fun MeridianFolioApp(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StitchDesktopTopNavigationBar(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     theme: ReaderTheme,
     pdfPageColorMode: PdfPageColorMode,
     viewMode: PageViewMode,
@@ -1081,34 +1084,38 @@ private fun StitchDesktopTopNavigationBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(palette.paper.copy(alpha = 0.96f)),
+            .background(palette.canvas.copy(alpha = 0.96f)),
     ) {
-        ModernAppNavigation(palette, activeSection, theme, onSelectSection, onToggleTheme)
+        if (isMobileOverride) {
+            ClayBottomNav(activeSection, onSelectSection)
+        } else {
+            ClayTopNav(activeSection, onSelectSection, theme, onToggleTheme)
+        }
         if (activeSection == MeridianSection.READER) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ModernChromeAction("Aa  Apariencia", palette, "top_typography_popover_btn", showTypographyPopover) {
+                ClayChromeAction("Aa  Apariencia", palette, "top_typography_popover_btn", showTypographyPopover) {
                     showTypographyPopover = !showTypographyPopover
                 }
-                ModernChromeAction("Marcapáginas", palette, "open_reminder_btn", activeReminder != null, onClick = onToggleReminderEditor)
-                ModernChromeAction("+ Frase", palette, "open_mark_phrase_btn", onClick = onToggleQuickMark)
-                ModernChromeAction("Buscar", palette, "reader_search_btn", description = "Buscar y reemplazar en el libro", onClick = onOpenSearch)
-                ModernChromeAction("Editar página", palette, "open_page_editor_btn", description = "Corregir palabras y párrafos de la página actual", onClick = onOpenPageEditor)
-                ModernChromeAction("Capítulos", palette, "open_chapter_manager_btn", description = "Renombrar, reordenar y reparar capítulos", onClick = onOpenChapterManager)
-                ModernChromeAction("Metadatos", palette, "open_metadata_btn", description = "Editar título, autor, idioma y portada", onClick = onOpenMetadataEditor)
-                ModernChromeAction("Deshacer", palette, "reader_undo_btn", enabled = canUndoEdit, description = "Deshacer el último cambio", onClick = onUndoEdit)
-                ModernChromeAction("Rehacer", palette, "reader_redo_btn", enabled = canRedoEdit, description = "Rehacer el último cambio deshecho", onClick = onRedoEdit)
-                ModernChromeAction("Enfoque", palette, "zen_mode_toggle_btn", onClick = onToggleZenControls)
-                ModernChromeAction("⛶  Pantalla completa", palette, "fullscreen_toggle_btn", isFullscreen, onClick = onToggleFullscreen)
-                ModernChromeAction("Vista móvil", palette, "mobile_preview_toggle", isMobileOverride, onClick = onToggleMobilePreview)
-                if (onOpenFileDialog != null) ModernChromeAction("Abrir archivo", palette, "reader_open_file", onClick = onOpenFileDialog)
+                ClayChromeAction("Marcapáginas", palette, "open_reminder_btn", activeReminder != null, onClick = onToggleReminderEditor)
+                ClayChromeAction("+ Frase", palette, "open_mark_phrase_btn", onClick = onToggleQuickMark)
+                ClayChromeAction("Buscar", palette, "reader_search_btn", description = "Buscar y reemplazar en el libro", onClick = onOpenSearch)
+                ClayChromeAction("Editar página", palette, "open_page_editor_btn", description = "Corregir palabras y párrafos de la página actual", onClick = onOpenPageEditor)
+                ClayChromeAction("Capítulos", palette, "open_chapter_manager_btn", description = "Renombrar, reordenar y reparar capítulos", onClick = onOpenChapterManager)
+                ClayChromeAction("Metadatos", palette, "open_metadata_btn", description = "Editar título, autor, idioma y portada", onClick = onOpenMetadataEditor)
+                ClayChromeAction("Deshacer", palette, "reader_undo_btn", enabled = canUndoEdit, description = "Deshacer el último cambio", onClick = onUndoEdit)
+                ClayChromeAction("Rehacer", palette, "reader_redo_btn", enabled = canRedoEdit, description = "Rehacer el último cambio deshecho", onClick = onRedoEdit)
+                ClayChromeAction("Enfoque", palette, "zen_mode_toggle_btn", onClick = onToggleZenControls)
+                ClayChromeAction("⛶  Pantalla completa", palette, "fullscreen_toggle_btn", isFullscreen, onClick = onToggleFullscreen)
+                ClayChromeAction("Vista móvil", palette, "mobile_preview_toggle", isMobileOverride, onClick = onToggleMobilePreview)
+                if (onOpenFileDialog != null) ClayChromeAction("Abrir archivo", palette, "reader_open_file", onClick = onOpenFileDialog)
             }
         }
         // Expandable Quick Typography & Screen Tone Strip (when "Aa" button clicked in header)
         AnimatedVisibility(visible = showTypographyPopover) {
             Surface(
-                color = palette.elevatedSurface,
-                border = BorderStroke(1.dp, palette.border),
+                color = palette.surfaceSecondary,
+                border = BorderStroke(1.dp, palette.outlineVariant),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 FlowRow(
@@ -1123,7 +1130,7 @@ private fun StitchDesktopTopNavigationBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Tono de Papel:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Tono de Papel:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         ReaderTheme.entries.forEach { t ->
                             val sel = t == theme
                             Row(
@@ -1131,8 +1138,8 @@ private fun StitchDesktopTopNavigationBar(
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(if (sel) palette.ink else palette.pageSurface)
-                                    .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                                    .background(if (sel) palette.onSurface else palette.surfaceContainerLowest)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
                                     .clickable { onSelectTheme(t) }
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             ) {
@@ -1141,11 +1148,11 @@ private fun StitchDesktopTopNavigationBar(
                                         .size(12.dp)
                                         .clip(CircleShape)
                                         .background(Color(t.swatchHex))
-                                        .border(1.dp, palette.muted, CircleShape),
+                                        .border(1.dp, palette.textMuted, CircleShape),
                                 )
                                 Text(
                                     text = t.stitchLabel,
-                                    color = if (sel) palette.paper else palette.ink,
+                                    color = if (sel) palette.canvas else palette.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                                 )
@@ -1158,21 +1165,21 @@ private fun StitchDesktopTopNavigationBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Color Pág. PDF:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Color Pág. PDF:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         PdfPageColorMode.entries.forEach { pdfMode ->
                             val sel = pdfMode == pdfPageColorMode
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (sel) palette.accentGreen else palette.pageSurface)
-                                    .border(1.dp, palette.border, RoundedCornerShape(5.dp))
+                                    .background(if (sel) palette.primary else palette.surfaceContainerLowest)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
                                     .clickable { onSelectPdfColorMode(pdfMode) }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                                     .testTag("pdf_color_mode_${pdfMode.name}"),
                             ) {
                                 Text(
                                     text = pdfMode.shortLabel,
-                                    color = if (sel) palette.onAccent else palette.ink,
+                                    color = if (sel) palette.onPrimary else palette.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                                 )
@@ -1185,20 +1192,20 @@ private fun StitchDesktopTopNavigationBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Vista:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Vista:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         PageViewMode.entries.forEach { m ->
                             val sel = m == viewMode
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(if (sel) palette.accentGreen else palette.pageSurface)
-                                    .border(1.dp, palette.border, RoundedCornerShape(5.dp))
+                                    .background(if (sel) palette.primary else palette.surfaceContainerLowest)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
                                     .clickable { onSelectViewMode(m) }
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             ) {
                                 Text(
                                     text = m.stitchLabel,
-                                    color = if (sel) palette.onAccent else palette.ink,
+                                    color = if (sel) palette.onPrimary else palette.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                                 )
@@ -1214,14 +1221,14 @@ private fun StitchDesktopTopNavigationBar(
                         if (isPdfOriginalMode) {
                             Text(
                                 text = "PDF en Vista Original (fiel a maquetación):",
-                                color = palette.muted,
+                                color = palette.textMuted,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(5.dp))
-                                    .background(palette.accentGreen)
+                                    .background(palette.primary)
                                     .clickable {
                                         onUpdateBookTypography { it.copy(pdfPreferReflowText = true) }
                                     }
@@ -1229,7 +1236,7 @@ private fun StitchDesktopTopNavigationBar(
                             ) {
                                 Text(
                                     text = "Activar Texto Adaptable (Reflujo)",
-                                    color = palette.onAccent,
+                                    color = palette.onPrimary,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -1239,8 +1246,8 @@ private fun StitchDesktopTopNavigationBar(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(5.dp))
-                                        .background(palette.pageSurface)
-                                        .border(1.dp, palette.border, RoundedCornerShape(5.dp))
+                                        .background(palette.surfaceContainerLowest)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
                                         .clickable {
                                             onUpdateBookTypography { it.copy(pdfPreferReflowText = false) }
                                         }
@@ -1248,50 +1255,50 @@ private fun StitchDesktopTopNavigationBar(
                                 ) {
                                     Text(
                                         text = "Vista Original PDF",
-                                        color = palette.ink,
+                                        color = palette.onSurface,
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                 }
                             }
-                            Text("Cuerpo:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Cuerpo:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(palette.pageSurface)
-                                    .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                                    .background(palette.surfaceContainerLowest)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
                                     .clickable { onFontSizeChange(fontSizePt - 1f) }
                                     .padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
-                                Text("A-", color = palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("A-", color = palette.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-                            Text("${fontSizePt.toInt()}pt", color = palette.ink, fontFamily = FontFamily.Monospace, fontSize = 11.5.sp)
+                            Text("${fontSizePt.toInt()}pt", color = palette.onSurface, fontFamily = FontFamily.Monospace, fontSize = 11.5.sp)
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(palette.pageSurface)
-                                    .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                                    .background(palette.surfaceContainerLowest)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
                                     .clickable { onFontSizeChange(fontSizePt + 1f) }
                                     .padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
-                                Text("A+", color = palette.ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("A+", color = palette.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Interlineado:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Interlineado:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             listOf(1.5f, 1.8f, 2.1f).forEach { mult ->
                                 val sel = kotlin.math.abs(lineSpacingMultiplier - mult) < 0.1f
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(if (sel) palette.accentGreen else palette.pageSurface)
-                                        .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                                        .background(if (sel) palette.primary else palette.surfaceContainerLowest)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
                                         .clickable { onLineSpacingChange(mult) }
                                         .padding(horizontal = 7.dp, vertical = 3.dp),
                                 ) {
                                     Text(
                                         text = "$mult",
-                                        color = if (sel) palette.onAccent else palette.ink,
+                                        color = if (sel) palette.onPrimary else palette.onSurface,
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 10.5.sp,
                                         fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
@@ -1304,7 +1311,7 @@ private fun StitchDesktopTopNavigationBar(
             }
         }
 
-        HorizontalDivider(color = palette.border, thickness = 1.dp)
+        HorizontalDivider(color = palette.outlineVariant, thickness = 1.dp)
     }
 }
 
@@ -1314,7 +1321,7 @@ private fun StitchDesktopTopNavigationBar(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StitchDesktopReaderSpreadWorkspace(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     theme: ReaderTheme,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
@@ -1365,7 +1372,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.paper)
+            .background(palette.canvas)
             .padding(
                 horizontal = if (isZenControlsHidden) 14.dp else 24.dp,
                 vertical = if (isZenControlsHidden) 10.dp else 16.dp,
@@ -1374,7 +1381,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
     ) {
         // 2A. AUXILIARY ARCHIVAL UTILITY BAR (Hidden in Zen Mode so pages fill the workspace)
         if (!isZenControlsHidden) {
-            ModernReaderToolbar(
+            ClayReaderToolbar(
                 palette, book, backHistoryTop, forwardHistoryTop, showTocBar, savedPhrases.size,
                 fitMode, zoomScale, pdfPageColorMode, onNavigateBack, onNavigateForward,
                 { showTocBar = !showTocBar }, onOpenNotebook,
@@ -1389,21 +1396,21 @@ private fun StitchDesktopReaderSpreadWorkspace(
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
                     .horizontalScroll(rememberScrollState())
-                    .background(palette.elevatedSurface, RoundedCornerShape(8.dp))
-                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                    .background(palette.surfaceSecondary, RoundedCornerShape(8.dp))
+                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Ir al capítulo:", color = palette.muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text("Ir al capítulo:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 tocEntries.forEach { entry ->
                     val isCurrentChap = currentPageObj.chapterTitle.startsWith(entry.title)
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(5.dp))
-                            .background(if (isCurrentChap) palette.accentGreen else palette.pageSurface)
-                            .border(1.dp, palette.border, RoundedCornerShape(5.dp))
-                            .shioriFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                            .background(if (isCurrentChap) palette.primary else palette.surfaceContainerLowest)
+                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
+                            .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
                                 onJumpToChapter(entry.startPage, entry.title)
                             }
                             .padding(horizontal = 9.dp, vertical = 4.dp)
@@ -1411,7 +1418,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                     ) {
                         Text(
                             text = "${entry.title.take(36)} (p.${entry.startPage})",
-                            color = if (isCurrentChap) palette.onAccent else palette.ink,
+                            color = if (isCurrentChap) palette.onPrimary else palette.onSurface,
                             fontSize = 11.sp,
                             fontWeight = if (isCurrentChap) FontWeight.SemiBold else FontWeight.Normal,
                         )
@@ -1455,9 +1462,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
                 PageViewMode.TWO_COLUMNS -> {
                     // Dual-Page Open Book Spread inside a unified rounded-xl card with theme-consistent center spine crease
                     Surface(
-                        color = palette.pageSurface,
+                        color = palette.surfaceContainerLowest,
                         shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.border),
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier
                             .fillMaxSize()
                             .shadow(elevation = 1.dp, shape = RoundedCornerShape(14.dp)),
@@ -1465,12 +1472,12 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(palette.pageSurface),
+                                .background(palette.surfaceContainerLowest),
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(palette.pageSurface),
+                                    .background(palette.surfaceContainerLowest),
                             ) {
                                 // Left Page (Verso)
                                 StitchBookSpreadLeaf(
@@ -1488,7 +1495,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .background(palette.pageSurface),
+                                        .background(palette.surfaceContainerLowest),
                                 )
 
                                 // Right Page (Recto)
@@ -1508,7 +1515,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight()
-                                            .background(palette.pageSurface),
+                                            .background(palette.surfaceContainerLowest),
                                     )
                                 } else {
                                     // End of Book Colophon Leaf (theme-consistent dark/light surface)
@@ -1516,20 +1523,16 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight()
-                                            .background(palette.pageSurface)
+                                            .background(palette.surfaceContainerLowest)
                                             .padding(36.dp),
                                         verticalArrangement = Arrangement.Center,
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
-                                        MeridianCompassMark(
-                                            inkColor = palette.accentGreen,
-                                            paperColor = palette.pageSurface,
-                                            size = 52.dp,
-                                        )
+                                        ClayLogoMark(size = 52.dp)
                                         Spacer(modifier = Modifier.height(14.dp))
                                         Text(
                                             text = "EXPLICIT LIBER · FIN DEL VOLUMEN",
-                                            color = palette.muted,
+                                            color = palette.textMuted,
                                             fontSize = 10.sp,
                                             fontFamily = FontFamily.Monospace,
                                             letterSpacing = 2.sp,
@@ -1537,7 +1540,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
                                             text = book.title,
-                                            color = palette.ink,
+                                            color = palette.onSurface,
                                             fontFamily = bookTypography.fontFamily.toComposeFontFamily(),
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 20.sp,
@@ -1546,7 +1549,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
                                             text = "Has alcanzado el último folio (${book.totalPages} de ${book.totalPages}).",
-                                            color = palette.inkSoft,
+                                            color = palette.onSurfaceVariant,
                                             fontSize = 13.sp,
                                             textAlign = TextAlign.Center,
                                         )
@@ -1564,9 +1567,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         Brush.horizontalGradient(
                                             colors = listOf(
                                                 Color.Transparent,
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.12f else 0.02f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.18f else 0.04f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDark) 0.12f else 0.02f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.12f else 0.02f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.18f else 0.04f),
+                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.12f else 0.02f),
                                                 Color.Transparent,
                                             ),
                                         ),
@@ -1577,7 +1580,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                         .align(Alignment.Center)
                                         .width(1.dp)
                                         .fillMaxHeight()
-                                        .background(palette.border),
+                                        .background(palette.outlineVariant),
                                 )
                             }
                         }
@@ -1586,9 +1589,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
 
                 PageViewMode.ONE_COLUMN -> {
                     Surface(
-                        color = palette.pageSurface,
+                        color = palette.surfaceContainerLowest,
                         shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.border),
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier
                             .fillMaxSize()
                             .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp)),
@@ -1670,9 +1673,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
 
                 PageViewMode.STRETCH -> {
                     Surface(
-                        color = palette.pageSurface,
+                        color = palette.surfaceContainerLowest,
                         shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.border),
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier
                             .fillMaxSize()
                             .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp)),
@@ -1701,9 +1704,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Surface(
-                            color = palette.pageSurface,
+                            color = palette.surfaceContainerLowest,
                             shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, palette.border),
+                            border = BorderStroke(1.dp, palette.outlineVariant),
                             modifier = Modifier
                                 .weight(0.72f)
                                 .fillMaxHeight()
@@ -1727,9 +1730,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
 
                         // Side Marginalia & Telemetry Card in Wide Mode
                         Surface(
-                            color = palette.pageSurface,
+                            color = palette.surfaceContainerLowest,
                             shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, palette.border),
+                            border = BorderStroke(1.dp, palette.outlineVariant),
                             modifier = Modifier
                                 .weight(0.28f)
                                 .fillMaxHeight()
@@ -1743,7 +1746,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                             ) {
                                 Text(
                                     text = "MARGINALIA & RITMO",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontSize = 10.5.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
@@ -1752,22 +1755,22 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "Restante: ${prediction.formattedRemainingTime()}",
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontFamily = FontFamily.Serif,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 16.sp,
                                 )
                                 Text(
                                     text = "Cadencia: ${prediction.formattedPacePerPage()} (${prediction.formattedWpm()})",
-                                    color = palette.inkSoft,
+                                    color = palette.onSurfaceVariant,
                                     fontSize = 12.sp,
                                 )
                                 Spacer(modifier = Modifier.height(14.dp))
-                                HorizontalDivider(color = palette.border)
+                                HorizontalDivider(color = palette.outlineVariant)
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = "NOTAS EN ESTE FOLIO",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontSize = 10.5.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
@@ -1778,7 +1781,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                 if (pagePhrases.isEmpty()) {
                                     Text(
                                         text = "Haz clic en cualquier frase sugerida debajo de un párrafo para subrayarla y guardarla en la página ${currentPageObj.pageNumber}.",
-                                        color = palette.muted,
+                                        color = palette.textMuted,
                                         fontSize = 12.sp,
                                     )
                                 } else {
@@ -1794,7 +1797,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                             Column {
                                                 Text(
                                                     text = "«${sp.phrase}»",
-                                                    color = palette.ink,
+                                                    color = palette.onSurface,
                                                     fontFamily = FontFamily.Serif,
                                                     fontWeight = FontWeight.SemiBold,
                                                     fontSize = 12.5.sp,
@@ -1802,7 +1805,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                                                 if (sp.note.isNotBlank()) {
                                                     Text(
                                                         text = sp.note,
-                                                        color = palette.inkSoft,
+                                                        color = palette.onSurfaceVariant,
                                                         fontSize = 11.sp,
                                                     )
                                                 }
@@ -1819,9 +1822,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
             // Draped Top-Right Swallowtail Bookmark Ribbon (Shiori 栞) — positioned in reserved right margin so it NEVER overlaps "FOLIO N"
             val isThisPageBookmarked = activeReminder?.pageNumber == currentPageObj.pageNumber ||
                 (secondPageObj != null && activeReminder?.pageNumber == secondPageObj.pageNumber)
-            SwallowtailBookmarkRibbon(
+            ClayBookmarkRibbon(
                 isActive = isThisPageBookmarked,
-                ribbonColor = palette.warningAmber,
+                tint = palette.warningAmber,
                 width = 28.dp,
                 height = 56.dp,
                 onClick = onSetReminderHere,
@@ -1835,9 +1838,9 @@ private fun StitchDesktopReaderSpreadWorkspace(
             if (isZenControlsHidden) {
                 val step = if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
                 Surface(
-                    color = palette.elevatedSurface.copy(alpha = 0.94f),
+                    color = palette.surfaceSecondary.copy(alpha = 0.94f),
                     shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, palette.border),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 10.dp)
@@ -1850,7 +1853,7 @@ private fun StitchDesktopReaderSpreadWorkspace(
                     ) {
                         Text(
                             text = "shiorifolio",
-                            color = palette.muted,
+                            color = palette.textMuted,
                             fontFamily = FontFamily.Serif,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.5.sp,
@@ -1858,18 +1861,18 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.pillBg else palette.disabledBg)
+                                .background(if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.surfaceContainerHigh else palette.disabledContainer)
                                 .clickable(enabled = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) {
                                     pagination.turn(book, step, -1, onPageChange)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                 .testTag("prev_page_button"),
                         ) {
-                            Text("‹ Ant.", color = if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.ink else palette.disabledInk, fontSize = 11.sp)
+                            Text("‹ Ant.", color = if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.onSurface else palette.disabledContent, fontSize = 11.sp)
                         }
                         Text(
                             text = "Pág. ${book.currentPage}${if (secondPageObj != null) "-${secondPageObj.pageNumber}" else ""} / ${book.totalPages}",
-                            color = palette.ink,
+                            color = palette.onSurface,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1877,26 +1880,26 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.pillBg else palette.disabledBg)
+                                .background(if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.surfaceContainerHigh else palette.disabledContainer)
                                 .clickable(enabled = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) {
                                     pagination.turn(book, step, 1, onPageChange)
                                 }
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                 .testTag("next_page_button"),
                         ) {
-                            Text("Sig. ›", color = if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.ink else palette.disabledInk, fontSize = 11.sp)
+                            Text("Sig. ›", color = if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.onSurface else palette.disabledContent, fontSize = 11.sp)
                         }
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(palette.accentGreen)
+                                .background(palette.primary)
                                 .clickable { onExitZenControls() }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                                 .testTag("exit_zen_mode_btn"),
                         ) {
                             Text(
                                 text = "Mostrar Controles (Esc)",
-                                color = palette.onAccent,
+                                color = palette.onPrimary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -1904,14 +1907,14 @@ private fun StitchDesktopReaderSpreadWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                                .background(palette.surfaceContainerHigh)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
                                 .clickable { onToggleFullscreen() }
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                         ) {
                             Text(
                                 text = if (isFullscreen) "Salir Pantalla Completa" else "Pantalla Completa ⛶",
-                                color = palette.ink,
+                                color = palette.onSurface,
                                 fontSize = 10.5.sp,
                             )
                         }
@@ -1952,12 +1955,12 @@ private fun currentBookAuthorSubtitle(book: BookDocument): String =
 
 /**
  * Computes a ColorFilter for PDF rendered page images according to the user's selected
- * PdfPageColorMode and current MeridianPalette.
+ * PdfPageColorMode and current ClayPalette.
  * Preserves natural colors on full-page artwork/illustrations in THEME_TINT dark mode so
  * covers and illustrations never turn into photo-negatives unless SMART_DARK is chosen.
  */
 internal fun pdfPageImageColorFilter(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     mode: PdfPageColorMode,
     isPdfDocument: Boolean,
     isFullPageArtwork: Boolean = false,
@@ -1966,7 +1969,7 @@ internal fun pdfPageImageColorFilter(
     return when (mode) {
         PdfPageColorMode.ORIGINAL -> null
         PdfPageColorMode.THEME_TINT -> {
-            if (palette.isDark) {
+            if (palette.isDarkReading) {
                 if (isFullPageArtwork) {
                     null
                 } else {
@@ -1981,7 +1984,7 @@ internal fun pdfPageImageColorFilter(
                     ColorFilter.colorMatrix(m)
                 }
             } else {
-                ColorFilter.tint(palette.pageSurface, androidx.compose.ui.graphics.BlendMode.Multiply)
+                ColorFilter.tint(palette.surfaceContainerLowest, androidx.compose.ui.graphics.BlendMode.Multiply)
             }
         }
         PdfPageColorMode.SMART_DARK -> {
@@ -2004,7 +2007,7 @@ internal fun pdfPageImageColorFilter(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun StitchBookSpreadLeaf(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -2053,7 +2056,7 @@ internal fun StitchBookSpreadLeaf(
 
     Column(
         modifier = modifier
-            .background(palette.pageSurface)
+            .background(palette.surfaceContainerLowest)
             .padding(
                 start = horizPad,
                 end = horizPad,
@@ -2073,7 +2076,7 @@ internal fun StitchBookSpreadLeaf(
             ) {
                 Text(
                     text = if (isLeftLeaf) book.title else page.chapterTitle,
-                    color = palette.muted,
+                    color = palette.textMuted,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.sp,
@@ -2084,7 +2087,7 @@ internal fun StitchBookSpreadLeaf(
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "${page.pageNumber}",
-                    color = palette.muted,
+                    color = palette.textMuted,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 10.sp,
@@ -2093,7 +2096,7 @@ internal fun StitchBookSpreadLeaf(
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = palette.border.copy(alpha = 0.7f), thickness = 1.dp)
+            HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.7f), thickness = 1.dp)
         }
 
         // 2. Leaf Body: Full-Page Illustration/PDF Canvas vs. Scrollable Literary Body
@@ -2138,7 +2141,7 @@ internal fun StitchBookSpreadLeaf(
         }
         // 3. Archival Folio Footer ("Folio • M-01" and page number)
         Column(modifier = Modifier.fillMaxWidth()) {
-            HorizontalDivider(color = palette.border.copy(alpha = 0.65f), thickness = 1.dp)
+            HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.65f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2148,14 +2151,14 @@ internal fun StitchBookSpreadLeaf(
                 if (isLeftLeaf) {
                     Text(
                         text = "${page.pageNumber}",
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
                     )
                     Text(
                         text = "Folio • SF-${page.pageNumber.toString().padStart(2, '0')} (${page.wordCount} palabras)",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                     )
@@ -2166,13 +2169,13 @@ internal fun StitchBookSpreadLeaf(
                         } else {
                             "ShioriFolio • Edición Crítica (${page.wordCount} palabras)"
                         },
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontStyle = FontStyle.Italic,
                         fontSize = 10.5.sp,
                     )
                     Text(
                         text = "${page.pageNumber}",
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
@@ -2191,7 +2194,7 @@ internal fun StitchBookSpreadLeaf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StitchFloatingCommandDock(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     theme: ReaderTheme,
     viewMode: PageViewMode,
     fontSizePt: Float,
@@ -2214,9 +2217,9 @@ private fun StitchFloatingCommandDock(
     val isPdfOriginalMode = book.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
 
     Surface(
-        color = palette.pageSurface,
+        color = palette.surfaceContainerLowest,
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, palette.border),
+        border = BorderStroke(1.dp, palette.outlineVariant),
         modifier = Modifier
             .widthIn(max = 1240.dp)
             .fillMaxWidth()
@@ -2243,9 +2246,9 @@ private fun StitchFloatingCommandDock(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (canGoPrev) palette.pillBg else palette.disabledBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                            .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoPrev) {
+                            .background(if (canGoPrev) palette.surfaceContainerHigh else palette.disabledContainer)
+                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                            .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoPrev) {
                                 pagination.turn(book, step, -1, onPageChange)
                             }
                             .testTag("prev_page_button"),
@@ -2253,7 +2256,7 @@ private fun StitchFloatingCommandDock(
                     ) {
                         Text(
                             text = "‹",
-                            color = if (canGoPrev) palette.ink else palette.disabledInk,
+                            color = if (canGoPrev) palette.onSurface else palette.disabledContent,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -2266,7 +2269,7 @@ private fun StitchFloatingCommandDock(
                     }
                     Text(
                         text = pageRangeLabel,
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
@@ -2277,9 +2280,9 @@ private fun StitchFloatingCommandDock(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (canGoNext) palette.pillBg else palette.disabledBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                            .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoNext) {
+                            .background(if (canGoNext) palette.surfaceContainerHigh else palette.disabledContainer)
+                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                            .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoNext) {
                                 pagination.turn(book, step, 1, onPageChange)
                             }
                             .testTag("next_page_button"),
@@ -2287,7 +2290,7 @@ private fun StitchFloatingCommandDock(
                     ) {
                         Text(
                             text = "›",
-                            color = if (canGoNext) palette.ink else palette.disabledInk,
+                            color = if (canGoNext) palette.onSurface else palette.disabledContent,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -2302,7 +2305,7 @@ private fun StitchFloatingCommandDock(
                 ) {
                     Text(
                         text = "${(prediction.completionFraction * 100).roundToInt()}%",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                     )
@@ -2313,9 +2316,9 @@ private fun StitchFloatingCommandDock(
                         },
                         valueRange = 1f..book.totalPages.coerceAtLeast(2).toFloat(),
                         colors = SliderDefaults.colors(
-                            thumbColor = palette.accentGreen,
-                            activeTrackColor = palette.accentGreen,
-                            inactiveTrackColor = palette.border,
+                            thumbColor = palette.primary,
+                            activeTrackColor = palette.primary,
+                            inactiveTrackColor = palette.outlineVariant,
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -2323,7 +2326,7 @@ private fun StitchFloatingCommandDock(
                     )
                     Text(
                         text = "100%",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                     )
@@ -2335,9 +2338,9 @@ private fun StitchFloatingCommandDock(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(palette.pillBg)
-                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                        .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) { onToggleTimer() }
+                        .background(palette.surfaceContainerHigh)
+                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                        .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) { onToggleTimer() }
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                         .testTag("prediction_badge"),
                 ) {
@@ -2345,19 +2348,19 @@ private fun StitchFloatingCommandDock(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (isTimerRunning) palette.accentGreen else palette.muted)
+                            .background(if (isTimerRunning) palette.primary else palette.textMuted)
                             .testTag("reading_timer_toggle"),
                     )
                     Text(
                         text = "${prediction.formattedRemainingTime()} restantes",
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                     )
                 }
             }
 
-            HorizontalDivider(color = palette.border.copy(alpha = 0.6f), thickness = 1.dp)
+            HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.6f), thickness = 1.dp)
 
             // Bottom Row: View Mode Switcher + 4 Circular Screen Tone Swatches + Typography / PDF Mode Micro-Controls
             FlowRow(
@@ -2371,7 +2374,7 @@ private fun StitchFloatingCommandDock(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(palette.pillBg)
+                        .background(palette.surfaceContainerHigh)
                         .padding(3.dp),
                 ) {
                     val orderedModes = listOf(
@@ -2388,8 +2391,8 @@ private fun StitchFloatingCommandDock(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(7.dp))
-                                .background(if (selected) palette.accentGreen else Color.Transparent)
-                                .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(7.dp)) {
+                                .background(if (selected) palette.primary else Color.Transparent)
+                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(7.dp)) {
                                     onSelectViewMode(mode)
                                 }
                                 .padding(horizontal = 7.dp, vertical = 4.dp)
@@ -2397,7 +2400,7 @@ private fun StitchFloatingCommandDock(
                         ) {
                             Text(
                                 text = mode.stitchLabel,
-                                color = if (selected) palette.onAccent else palette.inkSoft,
+                                color = if (selected) palette.onPrimary else palette.onSurfaceVariant,
                                 fontSize = 11.sp,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                             )
@@ -2412,7 +2415,7 @@ private fun StitchFloatingCommandDock(
                 ) {
                     Text(
                         text = "TONO",
-                        color = palette.muted,
+                        color = palette.textMuted,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.2.sp,
@@ -2426,10 +2429,10 @@ private fun StitchFloatingCommandDock(
                                 .background(Color(t.swatchHex))
                                 .border(
                                     width = if (isSel) 2.2.dp else 1.dp,
-                                    color = if (isSel) palette.accentGreen else palette.muted.copy(alpha = 0.5f),
+                                    color = if (isSel) palette.primary else palette.textMuted.copy(alpha = 0.5f),
                                     shape = CircleShape,
                                 )
-                                .shioriFocusableClickable(palette = palette, shape = CircleShape) { onSelectTheme(t) },
+                                .clayFocusableClickable(palette = palette, shape = CircleShape) { onSelectTheme(t) },
                         )
                     }
                 }
@@ -2443,14 +2446,14 @@ private fun StitchFloatingCommandDock(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                .background(palette.surfaceContainerHigh)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                 .padding(horizontal = 9.dp, vertical = 4.dp)
                                 .testTag("pdf_original_mode_badge"),
                         ) {
                             Text(
                                 text = "PDF: Vista Original",
-                                color = palette.muted,
+                                color = palette.textMuted,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -2459,8 +2462,8 @@ private fun StitchFloatingCommandDock(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(palette.accentGreen)
-                                .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
+                                .background(palette.primary)
+                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
                                     onUpdateBookTypography { it.copy(pdfPreferReflowText = true) }
                                 }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
@@ -2468,7 +2471,7 @@ private fun StitchFloatingCommandDock(
                         ) {
                             Text(
                                 text = "Modo Texto Adaptable",
-                                color = palette.onAccent,
+                                color = palette.onPrimary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -2478,9 +2481,9 @@ private fun StitchFloatingCommandDock(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(palette.pillBg)
-                                    .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                    .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
+                                    .background(palette.surfaceContainerHigh)
+                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                                    .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
                                         onUpdateBookTypography { it.copy(pdfPreferReflowText = false) }
                                     }
                                     .padding(horizontal = 9.dp, vertical = 4.dp)
@@ -2488,7 +2491,7 @@ private fun StitchFloatingCommandDock(
                             ) {
                                 Text(
                                     text = "Vista Original PDF",
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -2498,36 +2501,36 @@ private fun StitchFloatingCommandDock(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                .background(palette.surfaceContainerHigh)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                 .testTag("dock_reflow_font_controls"),
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
+                                    .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
                                         onFontSizeChange(fontSizePt - 1f)
                                     }
                                     .padding(horizontal = 9.dp, vertical = 4.dp)
                                     .testTag("dock_font_decrease_btn"),
                             ) {
-                                Text("A-", color = palette.ink, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                Text("A-", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                             }
                             Text(
                                 text = "${fontSizePt.toInt()}pt",
-                                color = palette.muted,
+                                color = palette.textMuted,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 4.dp),
                             )
                             Box(
                                 modifier = Modifier
-                                    .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
+                                    .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
                                         onFontSizeChange(fontSizePt + 1f)
                                     }
                                     .padding(horizontal = 9.dp, vertical = 4.dp)
                                     .testTag("dock_font_increase_btn"),
                             ) {
-                                Text("A+", color = palette.ink, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                                Text("A+", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                             }
                         }
 
@@ -2540,16 +2543,16 @@ private fun StitchFloatingCommandDock(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(palette.pillBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(8.dp))
-                                .shioriFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
+                                .background(palette.surfaceContainerHigh)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
                                     onLineSpacingChange(nextSpacing)
                                 }
                                 .padding(horizontal = 9.dp, vertical = 4.dp),
                         ) {
                             Text(
                                 text = "↕ ${lineSpacingMultiplier}×",
-                                color = palette.ink,
+                                color = palette.onSurface,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                             )
@@ -2567,7 +2570,7 @@ private fun StitchFloatingCommandDock(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StitchMobileKindleReaderLayout(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     theme: ReaderTheme,
     pdfPageColorMode: PdfPageColorMode,
     viewMode: PageViewMode,
@@ -2614,6 +2617,7 @@ private fun StitchMobileKindleReaderLayout(
     onToggleBookmarkHere: () -> Unit,
     onQuickSavePhrase: (phrase: String, context: String) -> Unit,
     onSelectSection: (MeridianSection) -> Unit,
+    activeSection: MeridianSection,
     onOpenFileDialog: (() -> Unit)?,
     onSwitchToDesktopView: () -> Unit,
 ) {
@@ -2655,7 +2659,7 @@ private fun StitchMobileKindleReaderLayout(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.paper),
+            .background(palette.canvas),
     ) {
         val viewportHeight = maxHeight
         val isLandscape = maxWidth > maxHeight
@@ -2806,9 +2810,9 @@ private fun StitchMobileKindleReaderLayout(
         // Floating pill at top right when HUD is hidden in Zen Mode on Mobile/Android
         if (!hudVisible) {
             Surface(
-                color = palette.elevatedSurface.copy(alpha = 0.92f),
+                color = palette.surfaceSecondary.copy(alpha = 0.92f),
                 shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, palette.border),
+                border = BorderStroke(1.dp, palette.outlineVariant),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 10.dp, end = 14.dp)
@@ -2817,7 +2821,7 @@ private fun StitchMobileKindleReaderLayout(
             ) {
                 Text(
                     text = "🧘 Controles (${book.currentPage}/${book.totalPages})",
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -2828,8 +2832,8 @@ private fun StitchMobileKindleReaderLayout(
         // 2. FULL-BLEED TOP 3DP PROGRESS LINE
         LinearProgressIndicator(
             progress = { prediction.completionFraction },
-            color = palette.accentGreen,
-            trackColor = palette.border.copy(alpha = 0.6f),
+            color = palette.primary,
+            trackColor = palette.outlineVariant.copy(alpha = 0.6f),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -2843,8 +2847,8 @@ private fun StitchMobileKindleReaderLayout(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Surface(
-                    color = palette.paper.copy(alpha = 0.94f),
-                    border = BorderStroke(1.dp, palette.border),
+                    color = palette.canvas.copy(alpha = 0.94f),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -2859,9 +2863,7 @@ private fun StitchMobileKindleReaderLayout(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.weight(1f),
                             ) {
-                                MeridianCompassMark(
-                                    inkColor = palette.accentGreen,
-                                    paperColor = palette.paper,
+                                ClayLogoMark(
                                     size = 30.dp,
                                     modifier = Modifier.clickable { onSelectSection(MeridianSection.LIBRARY) },
                                 )
@@ -2872,7 +2874,7 @@ private fun StitchMobileKindleReaderLayout(
                                     ) {
                                         Text(
                                             text = "shiorifolio",
-                                            color = palette.muted,
+                                            color = palette.textMuted,
                                             fontFamily = FontFamily.Serif,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 11.sp,
@@ -2880,12 +2882,12 @@ private fun StitchMobileKindleReaderLayout(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(4.dp))
-                                                .background(palette.accentGreen)
+                                                .background(palette.primary)
                                                 .padding(horizontal = 5.dp, vertical = 1.dp),
                                         ) {
                                             Text(
                                                 text = book.format.name,
-                                                color = palette.onAccent,
+                                                color = palette.onPrimary,
                                                 fontSize = 8.5.sp,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
@@ -2893,7 +2895,7 @@ private fun StitchMobileKindleReaderLayout(
                                         }
                                         Text(
                                             text = book.title,
-                                            color = palette.ink,
+                                            color = palette.onSurface,
                                             fontFamily = FontFamily.Serif,
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 13.5.sp,
@@ -2907,14 +2909,14 @@ private fun StitchMobileKindleReaderLayout(
                                     ) {
                                         Text(
                                             text = "Pág. ${book.currentPage} de ${book.totalPages} · ${(prediction.completionFraction * 100).roundToInt()}%",
-                                            color = palette.inkSoft,
+                                            color = palette.onSurfaceVariant,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 10.sp,
                                         )
-                                        Text("·", color = palette.muted, fontSize = 10.sp)
+                                        Text("·", color = palette.textMuted, fontSize = 10.sp)
                                         Text(
                                             text = "Capítulos (${tocEntries.size})",
-                                            color = palette.accentGreen,
+                                            color = palette.primary,
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             textDecoration = TextDecoration.Underline,
@@ -2923,10 +2925,10 @@ private fun StitchMobileKindleReaderLayout(
                                                 .testTag("toc_toggle_btn"),
                                         )
                                         if (canNavigateBack) {
-                                            Text("·", color = palette.muted, fontSize = 10.sp)
+                                            Text("·", color = palette.textMuted, fontSize = 10.sp)
                                             Text(
                                                 text = "↩ Volver",
-                                                color = palette.accentGreen,
+                                                color = palette.primary,
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier
@@ -2935,10 +2937,10 @@ private fun StitchMobileKindleReaderLayout(
                                             )
                                         }
                                         if (canNavigateForward) {
-                                            Text("·", color = palette.muted, fontSize = 10.sp)
+                                            Text("·", color = palette.textMuted, fontSize = 10.sp)
                                             Text(
                                                 text = "↪ Adelante",
-                                                color = palette.accentGreen,
+                                                color = palette.primary,
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier
@@ -2959,15 +2961,15 @@ private fun StitchMobileKindleReaderLayout(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isBookmarked) palette.warningAmber.copy(alpha = 0.20f) else palette.pillBg)
-                                        .border(1.dp, if (isBookmarked) palette.warningAmber else palette.border, RoundedCornerShape(8.dp))
+                                        .background(if (isBookmarked) palette.warningAmber.copy(alpha = 0.20f) else palette.surfaceContainerHigh)
+                                        .border(1.dp, if (isBookmarked) palette.warningAmber else palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .clickable { onToggleBookmarkHere() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp)
                                         .testTag("open_reminder_btn"),
                                 ) {
                                     Text(
                                         text = "栞",
-                                        color = if (isBookmarked) palette.warningAmber else palette.ink,
+                                        color = if (isBookmarked) palette.warningAmber else palette.onSurface,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                     )
@@ -2976,26 +2978,26 @@ private fun StitchMobileKindleReaderLayout(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.elevatedSurface)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(palette.surfaceSecondary)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .clickable { onToggleTheme() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp)
                                         .testTag("theme_toggle_button"),
                                 ) {
-                                    Text("◐", color = palette.ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("◐", color = palette.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(if (showKindleSettingsSheet) palette.accentGreen else palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(if (showKindleSettingsSheet) palette.primary else palette.surfaceContainerHigh)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .clickable { showKindleSettingsSheet = !showKindleSettingsSheet }
                                         .padding(horizontal = 9.dp, vertical = 5.dp),
                                 ) {
                                     Text(
                                         text = "⚙ Aa",
-                                        color = if (showKindleSettingsSheet) palette.onAccent else palette.ink,
+                                        color = if (showKindleSettingsSheet) palette.onPrimary else palette.onSurface,
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
@@ -3004,21 +3006,21 @@ private fun StitchMobileKindleReaderLayout(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(palette.surfaceContainerHigh)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .clickable { onToggleZenControls() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp)
                                         .testTag("zen_mode_toggle_btn"),
                                 ) {
-                                    Text("🧘", color = palette.ink, fontSize = 11.5.sp)
+                                    Text("🧘", color = palette.onSurface, fontSize = 11.5.sp)
                                 }
 
                                 Box {
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(if (showMobileEditMenu) palette.accentGreen else palette.pillBg)
-                                            .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                            .background(if (showMobileEditMenu) palette.primary else palette.surfaceContainerHigh)
+                                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                             .clickable { showMobileEditMenu = true }
                                             .padding(horizontal = 8.dp, vertical = 5.dp)
                                             .testTag("mobile_edit_menu_btn")
@@ -3026,7 +3028,7 @@ private fun StitchMobileKindleReaderLayout(
                                     ) {
                                         Text(
                                             text = "✎",
-                                            color = if (showMobileEditMenu) palette.onAccent else palette.ink,
+                                            color = if (showMobileEditMenu) palette.onPrimary else palette.onSurface,
                                             fontSize = 11.5.sp,
                                         )
                                     }
@@ -3065,12 +3067,12 @@ private fun StitchMobileKindleReaderLayout(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(palette.surfaceContainerHigh)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .clickable { onSwitchToDesktopView() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp),
                                 ) {
-                                    Text("🖥", color = palette.ink, fontSize = 11.5.sp)
+                                    Text("🖥", color = palette.onSurface, fontSize = 11.5.sp)
                                 }
                             }
                         }
@@ -3082,13 +3084,13 @@ private fun StitchMobileKindleReaderLayout(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(palette.pillBg)
+                                    .background(palette.surfaceContainerHigh)
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(statusBannerMessage, color = palette.ink, fontSize = 11.sp)
-                                Text("✕", color = palette.muted, fontSize = 11.sp, modifier = Modifier.clickable { onDismissStatus() })
+                                Text(statusBannerMessage, color = palette.onSurface, fontSize = 11.sp)
+                                Text("✕", color = palette.textMuted, fontSize = 11.sp, modifier = Modifier.clickable { onDismissStatus() })
                             }
                         }
 
@@ -3102,8 +3104,8 @@ private fun StitchMobileKindleReaderLayout(
                 // Expandable Mobile Chapter TOC Drawer
                 if (showMobileTocSheet && tocEntries.isNotEmpty()) {
                     Surface(
-                        color = palette.elevatedSurface,
-                        border = BorderStroke(1.dp, palette.border),
+                        color = palette.surfaceSecondary,
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
@@ -3118,8 +3120,8 @@ private fun StitchMobileKindleReaderLayout(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(if (isCurr) palette.accentGreen else palette.pageSurface)
-                                        .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                                        .background(if (isCurr) palette.primary else palette.surfaceContainerLowest)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
                                         .clickable {
                                             onJumpToChapter(entry.startPage, entry.title)
                                             showMobileTocSheet = false
@@ -3129,7 +3131,7 @@ private fun StitchMobileKindleReaderLayout(
                                 ) {
                                     Text(
                                         text = "${entry.title.take(28)} (p.${entry.startPage})",
-                                        color = if (isCurr) palette.onAccent else palette.ink,
+                                        color = if (isCurr) palette.onPrimary else palette.onSurface,
                                         fontSize = 11.sp,
                                     )
                                 }
@@ -3141,8 +3143,8 @@ private fun StitchMobileKindleReaderLayout(
                 // Expandable "Ajustes de Lectura Kindle" Sheet
                 if (showKindleSettingsSheet) {
                     Surface(
-                        color = palette.paper.copy(alpha = 0.98f),
-                        border = BorderStroke(1.dp, palette.border),
+                        color = palette.canvas.copy(alpha = 0.98f),
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier
                             .fillMaxWidth()
                             .shadow(elevation = 8.dp),
@@ -3158,7 +3160,7 @@ private fun StitchMobileKindleReaderLayout(
                             ) {
                                 Text(
                                     text = "AJUSTES DE LECTURA KINDLE",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
@@ -3167,7 +3169,7 @@ private fun StitchMobileKindleReaderLayout(
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text(
                                         text = if (isFullscreen) "Salir Pantalla Completa" else "Pantalla Completa ⛶",
-                                        color = palette.inkSoft,
+                                        color = palette.onSurfaceVariant,
                                         fontSize = 11.sp,
                                         modifier = Modifier
                                             .clickable { onToggleFullscreen() }
@@ -3175,7 +3177,7 @@ private fun StitchMobileKindleReaderLayout(
                                     )
                                     Text(
                                         text = "Cerrar",
-                                        color = palette.accentGreen,
+                                        color = palette.primary,
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier.clickable { showKindleSettingsSheet = false },
@@ -3198,7 +3200,7 @@ private fun StitchMobileKindleReaderLayout(
                                             .background(Color(t.swatchHex))
                                             .border(
                                                 width = if (isSel) 2.dp else 1.dp,
-                                                color = if (isSel) palette.accentGreen else palette.border,
+                                                color = if (isSel) palette.primary else palette.outlineVariant,
                                                 shape = RoundedCornerShape(10.dp),
                                             )
                                             .clickable { onSelectTheme(t) }
@@ -3224,19 +3226,19 @@ private fun StitchMobileKindleReaderLayout(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text("PDF:", color = palette.muted, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                    Text("PDF:", color = palette.textMuted, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                                     PdfPageColorMode.entries.forEach { pdfMode ->
                                         val sel = pdfMode == pdfPageColorMode
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(if (sel) palette.accentGreen else palette.pillBg)
+                                                .background(if (sel) palette.primary else palette.surfaceContainerHigh)
                                                 .clickable { onSelectPdfColorMode(pdfMode) }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
                                             Text(
                                                 text = pdfMode.shortLabel,
-                                                color = if (sel) palette.onAccent else palette.ink,
+                                                color = if (sel) palette.onPrimary else palette.onSurface,
                                                 fontSize = 10.5.sp,
                                                 fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                                             )
@@ -3262,29 +3264,29 @@ private fun StitchMobileKindleReaderLayout(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(palette.surfaceContainerHigh)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .padding(4.dp),
                                     horizontalArrangement = Arrangement.SpaceEvenly,
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
                                         text = "A-",
-                                        color = palette.ink,
+                                        color = palette.onSurface,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         modifier = Modifier.clickable { onFontSizeChange(fontSizePt - 1.5f) }.padding(6.dp),
                                     )
                                     Text(
                                         text = "${fontSizePt.toInt()}pt",
-                                        color = palette.accentGreen,
+                                        color = palette.primary,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.5.sp,
                                     )
                                     Text(
                                         text = "A+",
-                                        color = palette.ink,
+                                        color = palette.onSurface,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         modifier = Modifier.clickable { onFontSizeChange(fontSizePt + 1.5f) }.padding(6.dp),
@@ -3295,8 +3297,8 @@ private fun StitchMobileKindleReaderLayout(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.pillBg)
-                                        .border(1.dp, palette.border, RoundedCornerShape(8.dp))
+                                        .background(palette.surfaceContainerHigh)
+                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
                                         .padding(4.dp),
                                     horizontalArrangement = Arrangement.SpaceEvenly,
                                     verticalAlignment = Alignment.CenterVertically,
@@ -3306,13 +3308,13 @@ private fun StitchMobileKindleReaderLayout(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(if (sel) palette.accentGreen else Color.Transparent)
+                                                .background(if (sel) palette.primary else Color.Transparent)
                                                 .clickable { onLineSpacingChange(mult) }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
                                             Text(
                                                 text = "$mult",
-                                                color = if (sel) palette.onAccent else palette.ink,
+                                                color = if (sel) palette.onPrimary else palette.onSurface,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontSize = 11.sp,
                                             )
@@ -3332,14 +3334,14 @@ private fun StitchMobileKindleReaderLayout(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(if (sel) palette.accentGreen else palette.pillBg)
+                                                .background(if (sel) palette.primary else palette.surfaceContainerHigh)
                                                 .clickable { onSelectViewMode(m) }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                                 .testTag("view_mode_${m.name}"),
                                         ) {
                                             Text(
                                                 text = m.shortTag,
-                                                color = if (sel) palette.onAccent else palette.ink,
+                                                color = if (sel) palette.onPrimary else palette.onSurface,
                                                 fontSize = 10.5.sp,
                                             )
                                         }
@@ -3351,23 +3353,23 @@ private fun StitchMobileKindleReaderLayout(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(palette.accentGreen)
+                                                .background(palette.primary)
                                                 .clickable { onOpenFileDialog() }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
-                                            Text("Abrir Archivo", color = palette.onAccent, fontSize = 10.5.sp)
+                                            Text("Abrir Archivo", color = palette.onPrimary, fontSize = 10.5.sp)
                                         }
                                     }
                                     MeridianSection.entries.filter { it != MeridianSection.READER }.forEach { sec ->
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(palette.pillBg)
-                                                .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                                                .background(palette.surfaceContainerHigh)
+                                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
                                                 .clickable { onSelectSection(sec) }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
-                                            Text(sec.stitchTabTitle, color = palette.ink, fontSize = 10.5.sp)
+                                            Text(sec.stitchTabTitle, color = palette.onSurface, fontSize = 10.5.sp)
                                         }
                                     }
                                 }
@@ -3389,9 +3391,9 @@ private fun StitchMobileKindleReaderLayout(
             ) {
                 // Floating Minimal Reading Pace Pill ("Ritmo: 7h 4m restantes · 33s/pág (80 WPM)")
                 Surface(
-                    color = palette.paper.copy(alpha = 0.94f),
+                    color = palette.canvas.copy(alpha = 0.94f),
                     shape = CircleShape,
-                    border = BorderStroke(1.dp, palette.border),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                     modifier = Modifier
                         .padding(bottom = 6.dp)
                         .shadow(elevation = 4.dp, shape = CircleShape)
@@ -3407,12 +3409,12 @@ private fun StitchMobileKindleReaderLayout(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(if (isTimerRunning) Color(0xFF10B981) else palette.muted)
+                                .background(if (isTimerRunning) Color(0xFF10B981) else palette.textMuted)
                                 .testTag("reading_timer_toggle"),
                         )
                         Text(
                             text = "Ritmo: ${prediction.formattedRemainingTime()} restantes · ${prediction.estimatedSecondsPerPage.toInt()}s/pág (${prediction.estimatedWordsPerMinute.toInt()} WPM)",
-                            color = palette.inkSoft,
+                            color = palette.onSurfaceVariant,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                         )
@@ -3421,8 +3423,8 @@ private fun StitchMobileKindleReaderLayout(
 
                 // Bottom Navigation Dock
                 Surface(
-                    color = palette.paper.copy(alpha = 0.96f),
-                    border = BorderStroke(1.dp, palette.border),
+                    color = palette.canvas.copy(alpha = 0.96f),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     val canPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, 1, -1)
@@ -3438,8 +3440,8 @@ private fun StitchMobileKindleReaderLayout(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (canPrev) palette.pillBg else palette.disabledBg)
-                                .border(1.dp, palette.border, RoundedCornerShape(10.dp))
+                                .background(if (canPrev) palette.surfaceContainerHigh else palette.disabledContainer)
+                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(10.dp))
                                 .clickable(enabled = canPrev) {
                                     pagination.turn(book, 1, -1, onPageChange)
                                 }
@@ -3448,7 +3450,7 @@ private fun StitchMobileKindleReaderLayout(
                         ) {
                             Text(
                                 text = "‹ Ant.",
-                                color = if (canPrev) palette.ink else palette.disabledInk,
+                                color = if (canPrev) palette.onSurface else palette.disabledContent,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -3465,14 +3467,14 @@ private fun StitchMobileKindleReaderLayout(
                             ) {
                                 Text(
                                     text = "${book.currentPage} / ${book.totalPages}",
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.5.sp,
                                 )
                                 Text(
                                     text = "· Modo Zen",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontSize = 10.sp,
                                     modifier = Modifier.clickable { onToggleZenControls() },
                                 )
@@ -3482,9 +3484,9 @@ private fun StitchMobileKindleReaderLayout(
                                 onValueChange = { onPageChange(it.roundToInt().coerceIn(1, book.totalPages)) },
                                 valueRange = 1f..book.totalPages.coerceAtLeast(2).toFloat(),
                                 colors = SliderDefaults.colors(
-                                    thumbColor = palette.accentGreen,
-                                    activeTrackColor = palette.accentGreen,
-                                    inactiveTrackColor = palette.border,
+                                    thumbColor = palette.primary,
+                                    activeTrackColor = palette.primary,
+                                    inactiveTrackColor = palette.outlineVariant,
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -3496,7 +3498,7 @@ private fun StitchMobileKindleReaderLayout(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (canNext) palette.accentGreen else palette.disabledBg)
+                                .background(if (canNext) palette.primary else palette.disabledContainer)
                                 .clickable(enabled = canNext) {
                                     pagination.turn(book, 1, 1, onPageChange)
                                 }
@@ -3505,13 +3507,16 @@ private fun StitchMobileKindleReaderLayout(
                         ) {
                             Text(
                                 text = "Sig. ›",
-                                color = if (canNext) palette.onAccent else palette.disabledInk,
+                                color = if (canNext) palette.onPrimary else palette.disabledContent,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
                 }
+
+                // Compact clay section navigation (same tags as the desktop top nav).
+                ClayBottomNav(activeSection, onSelectSection)
             }
         }
     }
@@ -3519,7 +3524,7 @@ private fun StitchMobileKindleReaderLayout(
 
 @Composable
 private fun PageReminderBanner(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     currentBook: BookDocument,
     reminder: PageReminder?,
     showEditor: Boolean,
@@ -3553,11 +3558,11 @@ private fun PageReminderBanner(
         onCloseEditor()
     }
 
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
 
     Surface(
-        color = palette.pageSurface,
-        border = BorderStroke(1.dp, palette.border),
+        color = palette.surfaceContainerLowest,
+        border = BorderStroke(1.dp, palette.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 3.dp)
@@ -3600,7 +3605,7 @@ private fun PageReminderBanner(
                         }
                         Text(
                             text = "${reminder.targetLabel}: ${reminder.note}",
-                            color = palette.inkSoft,
+                            color = palette.onSurfaceVariant,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -3610,17 +3615,17 @@ private fun PageReminderBanner(
                         Button(
                             onClick = { onJumpToReminder(reminder.pageNumber) },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = palette.accentGreen,
-                                contentColor = palette.onAccent,
+                                containerColor = palette.primary,
+                                contentColor = palette.onPrimary,
                             ),
                         ) {
                             Text("Continuar en Pág. ${reminder.pageNumber}", fontSize = 11.sp)
                         }
                         OutlinedButton(
                             onClick = onToggleEditor,
-                            border = BorderStroke(1.dp, palette.border),
+                            border = BorderStroke(1.dp, palette.outlineVariant),
                         ) {
-                            Text("Editar", color = palette.ink, fontSize = 11.sp)
+                            Text("Editar", color = palette.onSurface, fontSize = 11.sp)
                         }
                     }
                 }
@@ -3634,21 +3639,21 @@ private fun PageReminderBanner(
                 ) {
                     Text(
                         text = "Configurar Recordatorio de Página (栞 Shiori)",
-                        color = palette.ink,
+                        color = palette.onSurface,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp,
                     )
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(palette.pillBg)
-                            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                            .background(palette.surfaceContainerHigh)
+                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
                             .clickable { cancelAndDiscardChanges() }
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
                             text = "✕ Cerrar (Esc)",
-                            color = palette.inkSoft,
+                            color = palette.onSurfaceVariant,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -3696,25 +3701,25 @@ private fun PageReminderBanner(
                             onSaveReminder(parsedPage, noteInput, targetLabelInput)
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = palette.accentGreen,
-                            contentColor = palette.onAccent,
+                            containerColor = palette.primary,
+                            contentColor = palette.onPrimary,
                         ),
                     ) {
                         Text("Guardar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                     OutlinedButton(
                         onClick = cancelAndDiscardChanges,
-                        border = BorderStroke(1.dp, palette.border),
+                        border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier.testTag("close_reminder_editor_btn"),
                     ) {
-                        Text("Cancelar", color = palette.ink, fontSize = 12.sp)
+                        Text("Cancelar", color = palette.onSurface, fontSize = 12.sp)
                     }
                     if (reminder != null) {
                         OutlinedButton(
                             onClick = onClearReminder,
-                            border = BorderStroke(1.dp, palette.border),
+                            border = BorderStroke(1.dp, palette.outlineVariant),
                         ) {
-                            Text("Borrar", color = palette.inkSoft, fontSize = 12.sp)
+                            Text("Borrar", color = palette.onSurfaceVariant, fontSize = 12.sp)
                         }
                     }
                 }
@@ -3725,7 +3730,7 @@ private fun PageReminderBanner(
 
 @Composable
 private fun QuickMarkPhraseBar(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     currentBook: BookDocument,
     phrase: String,
     note: String,
@@ -3736,11 +3741,11 @@ private fun QuickMarkPhraseBar(
     onSave: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
 
     Surface(
-        color = palette.pageSurface,
-        border = BorderStroke(1.dp, palette.accentGreen),
+        color = palette.surfaceContainerLowest,
+        border = BorderStroke(1.dp, palette.primary),
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -3754,7 +3759,7 @@ private fun QuickMarkPhraseBar(
             ) {
                 Text(
                     text = "Marcar y Guardar Palabra o Frase (Pág. ${currentBook.currentPage})",
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
                 )
@@ -3767,13 +3772,13 @@ private fun QuickMarkPhraseBar(
                                 .background(palette.highlightColor(t))
                                 .border(
                                     width = if (isSelected) 2.dp else 1.dp,
-                                    color = if (isSelected) palette.ink else palette.border,
+                                    color = if (isSelected) palette.onSurface else palette.outlineVariant,
                                     shape = RoundedCornerShape(4.dp),
                                 )
                                 .clickable { onToneChange(t) }
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                         ) {
-                            Text(t.label, color = palette.ink, fontSize = 11.sp)
+                            Text(t.label, color = palette.onSurface, fontSize = 11.sp)
                         }
                     }
                 }
@@ -3807,17 +3812,17 @@ private fun QuickMarkPhraseBar(
                 Button(
                     onClick = onSave,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accentGreen,
-                        contentColor = palette.onAccent,
+                        containerColor = palette.primary,
+                        contentColor = palette.onPrimary,
                     ),
                 ) {
                     Text("Guardar Frase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
                 OutlinedButton(
                     onClick = onClose,
-                    border = BorderStroke(1.dp, palette.border),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                 ) {
-                    Text("Cancelar", color = palette.ink, fontSize = 12.sp)
+                    Text("Cancelar", color = palette.onSurface, fontSize = 12.sp)
                 }
             }
         }
@@ -3827,7 +3832,7 @@ private fun QuickMarkPhraseBar(
 internal fun buildHighlightedAnnotatedString(
     text: String,
     phrases: List<SavedPhrase>,
-    palette: MeridianPalette,
+    palette: ClayPalette,
 ): AnnotatedString = buildAnnotatedString {
     append(text)
     val lower = text.lowercase()
@@ -3840,7 +3845,7 @@ internal fun buildHighlightedAnnotatedString(
             addStyle(
                 style = SpanStyle(
                     background = palette.highlightColor(saved.tone),
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontWeight = FontWeight.SemiBold,
                 ),
                 start = startIdx,
@@ -3869,7 +3874,7 @@ internal fun extractCandidatePhrases(text: String): List<String> {
  */
 @Composable
 private fun SavedPhrasesVaultView(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     allPhrases: List<SavedPhrase>,
     currentBook: BookDocument,
     onSaveNewPhrase: (phrase: String, note: String, tone: HighlightTone) -> Unit,
@@ -3881,7 +3886,7 @@ private fun SavedPhrasesVaultView(
     var newPhraseText by remember { mutableStateOf("") }
     var newPhraseNote by remember { mutableStateOf("") }
     var selectedTone by remember { mutableStateOf(HighlightTone.SAGE) }
-    val textFieldColors = shioriOutlinedTextFieldColors(palette)
+    val textFieldColors = clayTextFieldColors(palette)
 
     val filtered = remember(allPhrases, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -3902,15 +3907,15 @@ private fun SavedPhrasesVaultView(
             .padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
         Surface(
-            color = palette.pageSurface,
+            color = palette.surfaceContainerLowest,
             shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.border),
+            border = BorderStroke(1.dp, palette.outlineVariant),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
                     text = "MARK & SAVE NEW WORD OR PHRASE FROM ${currentBook.title.uppercase()} (PAGE ${currentBook.currentPage})",
-                    color = palette.ink,
+                    color = palette.onSurface,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -3947,13 +3952,13 @@ private fun SavedPhrasesVaultView(
                                 .background(palette.highlightColor(t))
                                 .border(
                                     width = if (t == selectedTone) 2.dp else 1.dp,
-                                    color = if (t == selectedTone) palette.ink else palette.border,
+                                    color = if (t == selectedTone) palette.onSurface else palette.outlineVariant,
                                     shape = RoundedCornerShape(4.dp),
                                 )
                                 .clickable { selectedTone = t }
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                         ) {
-                            Text(t.label, color = palette.ink, fontSize = 11.sp)
+                            Text(t.label, color = palette.onSurface, fontSize = 11.sp)
                         }
                     }
                     Button(
@@ -3964,7 +3969,7 @@ private fun SavedPhrasesVaultView(
                                 newPhraseNote = ""
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = palette.accentGreen, contentColor = palette.onAccent),
+                        colors = ButtonDefaults.buttonColors(containerColor = palette.primary, contentColor = palette.onPrimary),
                     ) {
                         Text("Save", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -3981,7 +3986,7 @@ private fun SavedPhrasesVaultView(
         ) {
             Text(
                 text = "Saved Words & Phrases (${filtered.size})",
-                color = palette.ink,
+                color = palette.onSurface,
                 fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 20.sp,
@@ -4010,9 +4015,9 @@ private fun SavedPhrasesVaultView(
         ) {
             filtered.forEach { item ->
                 Surface(
-                    color = palette.pageSurface,
+                    color = palette.surfaceContainerLowest,
                     shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, palette.border),
+                    border = BorderStroke(1.dp, palette.outlineVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -4035,14 +4040,14 @@ private fun SavedPhrasesVaultView(
                                 ) {
                                     Text(
                                         text = "\"${item.phrase}\"",
-                                        color = palette.ink,
+                                        color = palette.onSurface,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                     )
                                 }
                                 Text(
                                     text = "${item.bookTitle} · Page ${item.pageNumber}",
-                                    color = palette.muted,
+                                    color = palette.textMuted,
                                     fontSize = 12.sp,
                                 )
                                 if (item.anchorStatus == AnchorStatus.ORPHANED) {
@@ -4066,7 +4071,7 @@ private fun SavedPhrasesVaultView(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "Context: \"${item.contextSentence}\"",
-                                color = palette.inkSoft,
+                                color = palette.onSurfaceVariant,
                                 fontStyle = FontStyle.Italic,
                                 fontSize = 12.5.sp,
                             )
@@ -4074,7 +4079,7 @@ private fun SavedPhrasesVaultView(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Note: ${item.note}",
-                                    color = palette.ink,
+                                    color = palette.onSurface,
                                     fontSize = 12.5.sp,
                                 )
                             }
@@ -4091,15 +4096,15 @@ private fun SavedPhrasesVaultView(
                             }
                             OutlinedButton(
                                 onClick = { onJumpToPhrase(item) },
-                                border = BorderStroke(1.dp, palette.border),
+                                border = BorderStroke(1.dp, palette.outlineVariant),
                             ) {
-                                Text("Open Page ${item.pageNumber}", color = palette.ink, fontSize = 12.sp)
+                                Text("Open Page ${item.pageNumber}", color = palette.onSurface, fontSize = 12.sp)
                             }
                             OutlinedButton(
                                 onClick = { onDeletePhrase(item.id) },
-                                border = BorderStroke(1.dp, palette.border),
+                                border = BorderStroke(1.dp, palette.outlineVariant),
                             ) {
-                                Text("Delete", color = palette.muted, fontSize = 12.sp)
+                                Text("Delete", color = palette.textMuted, fontSize = 12.sp)
                             }
                         }
                     }

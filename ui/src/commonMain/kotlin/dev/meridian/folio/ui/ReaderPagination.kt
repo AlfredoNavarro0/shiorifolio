@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.*
+import dev.meridian.folio.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -131,7 +132,7 @@ internal fun paginateText(
 
 @Composable
 internal fun PagedBookBody(
-    palette: MeridianPalette,
+    palette: ClayPalette,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -173,7 +174,7 @@ internal fun PagedBookBody(
                     append(PagePiece(imagePath = block.imagePath, heightPx = (bodyHeight * 0.72f).toInt()))
                 }
                 val style = TextStyle(
-                    color = if (block.style == BlockStyle.QUOTE) palette.inkSoft else palette.ink,
+                    color = if (block.style == BlockStyle.QUOTE) palette.onSurfaceVariant else palette.onSurface,
                     fontFamily = typography.fontFamily.toComposeFontFamily(),
                     fontSize = (if (block.style == BlockStyle.HEADING) fontSizeSp + 4 else fontSizeSp).sp,
                     lineHeight = (if (block.style == BlockStyle.HEADING) lineHeightSp + 4 else lineHeightSp).sp,
@@ -224,11 +225,11 @@ internal fun PagedBookBody(
             }
             Row(Modifier.fillMaxWidth().height(30.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (pages.size > 1) "Página ${page.pageNumber} · ${index + 1}/${pages.size}" else "",
-                    color = palette.muted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
+                    color = palette.textMuted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
                 val text = pages[index].joinToString(" ") { it.text.text }
                 val candidate = remember(text) { extractCandidatePhrases(text).firstOrNull() }
-                if (candidate != null) Text("+ Frase", color = palette.accentGreen, fontSize = 11.sp,
-                    modifier = Modifier.shioriFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
+                if (candidate != null) Text("+ Frase", color = palette.primary, fontSize = 11.sp,
+                    modifier = Modifier.clayFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
             }
         }
     }

@@ -17,6 +17,7 @@ import dev.meridian.folio.core.FolioRepository
 import dev.meridian.folio.core.PageViewMode
 import dev.meridian.folio.core.PdfPageColorMode
 import dev.meridian.folio.core.ReaderTheme
+import dev.meridian.folio.ui.theme.ClayTokens
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -123,7 +124,7 @@ class MeridianFolioUiTest {
 
         repo.setPdfPageColorMode(PdfPageColorMode.ORIGINAL)
         assertEquals(PdfPageColorMode.ORIGINAL, repo.state.value.pdfPageColorMode)
-        assertTrue(MeridianDesign.DarkPalette.ink.luminance > 0.7f)
+        assertTrue(ClayTokens.readingTone(ReaderTheme.DARK).ink.luminance > 0.7f)
     }
 
     @Test

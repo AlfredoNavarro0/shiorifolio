@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.*
+import dev.meridian.folio.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,7 +63,7 @@ internal fun LibraryFolderEffects(repository: FolioRepository) {
 @Composable
 internal fun LibraryWorkspace(
     repository: FolioRepository,
-    palette: MeridianPalette,
+    palette: ClayPalette,
     onOpenBook: (String) -> Unit,
     onCreated: () -> Unit,
     onPickFolder: (((String) -> Unit) -> Unit)?,
@@ -108,7 +109,7 @@ internal fun LibraryWorkspace(
         } }
     }
 
-    Column(Modifier.fillMaxSize().background(palette.paper).padding(horizontal = 24.dp, vertical = 20.dp).testTag("library_workspace")) {
+    Column(Modifier.fillMaxSize().background(palette.canvas).padding(horizontal = 24.dp, vertical = 20.dp).testTag("library_workspace")) {
         if (progress.running || progress.processed > 0 || progress.errors.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().testTag("library_import_progress")) {
                 if (progress.running) LinearProgressIndicator(
@@ -117,11 +118,11 @@ internal fun LibraryWorkspace(
                 Text(
                     "${progress.processed}/${progress.total} · ${progress.imported} nuevos · ${progress.duplicates} existentes · ${progress.errors.size} errores" +
                         if (progress.running) " · ${progress.currentFile}" else "",
-                    color = palette.inkSoft, fontSize = 12.sp,
+                    color = palette.onSurfaceVariant, fontSize = 12.sp,
                 )
             }
         }
-        message?.let { Text(it, color = palette.ink, modifier = Modifier.testTag("library_message")) }
+        message?.let { Text(it, color = palette.onSurface, modifier = Modifier.testTag("library_message")) }
         if (selected.isNotEmpty()) {
             LibrarySelectionBar(repository, palette, selected,
                 onClear = { selected = emptySet() }, onDelete = { showDelete = true })
@@ -150,7 +151,7 @@ internal fun LibraryWorkspace(
                 Text(progress.errors.joinToString("\n"), color = palette.warningAmber, modifier = Modifier.testTag("library_import_errors"))
             }
             if (books.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("No hay libros que coincidan. Importa un archivo o añade una carpeta.", color = palette.inkSoft)
+                Text("No hay libros que coincidan. Importa un archivo o añade una carpeta.", color = palette.onSurfaceVariant)
             }
             items(books, key = { it.id }) { book ->
                 LibraryBookItem(book, state.telemetry[book.id], palette, prefs, book.id in selected, selected.isNotEmpty(),
@@ -248,10 +249,10 @@ private fun LibraryAction(text: String, tag: String, selected: Boolean = false, 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LibrarySelectionBar(repository: FolioRepository, palette: MeridianPalette, selected: Set<String>, onClear: () -> Unit, onDelete: () -> Unit) {
+private fun LibrarySelectionBar(repository: FolioRepository, palette: ClayPalette, selected: Set<String>, onClear: () -> Unit, onDelete: () -> Unit) {
     val state by repository.state.collectAsState()
-    Row(Modifier.fillMaxWidth().background(palette.elevatedSurface).horizontalScroll(rememberScrollState()).padding(8.dp).testTag("library_selection_bar"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("${selected.size} seleccionados", color = palette.ink, modifier = Modifier.padding(12.dp))
+    Row(Modifier.fillMaxWidth().background(palette.surfaceSecondary).horizontalScroll(rememberScrollState()).padding(8.dp).testTag("library_selection_bar"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("${selected.size} seleccionados", color = palette.onSurface, modifier = Modifier.padding(12.dp))
         LibraryStatus.entries.forEach { status ->
             LibraryAction(status.label, "library_batch_status_${status.name}") { repository.library.setStatus(selected, status) }
         }
@@ -266,11 +267,11 @@ private fun LibrarySelectionBar(repository: FolioRepository, palette: MeridianPa
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LibraryFilters(repository: FolioRepository, palette: MeridianPalette, filter: LibraryFilter, onChange: (LibraryFilter) -> Unit) {
+private fun LibraryFilters(repository: FolioRepository, palette: ClayPalette, filter: LibraryFilter, onChange: (LibraryFilter) -> Unit) {
     val state by repository.state.collectAsState()
     var collectionName by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxWidth().background(palette.elevatedSurface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Filtros combinables", color = palette.ink, fontWeight = FontWeight.SemiBold)
+    Column(Modifier.fillMaxWidth().background(palette.surfaceSecondary).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Filtros combinables", color = palette.onSurface, fontWeight = FontWeight.SemiBold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             LibraryStatus.entries.forEach { status ->
                 LibraryAction(status.label, "library_filter_status_${status.name}", status in filter.statuses) {
@@ -296,7 +297,7 @@ private fun LibraryFilters(repository: FolioRepository, palette: MeridianPalette
             LibraryDateField("Finalizado desde", "library_finished_from", filter.completedAfterMs) { onChange(filter.copy(completedAfterMs = it)) }
             LibraryDateField("Finalizado hasta", "library_finished_to", filter.completedBeforeMs, endOfDay = true) { onChange(filter.copy(completedBeforeMs = it)) }
         }
-        Text("Ordenar por", color = palette.inkSoft)
+        Text("Ordenar por", color = palette.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             LibrarySort.entries.forEach { sort ->
                 LibraryAction(sort.label, "library_sort_${sort.name}", state.libraryPreferences.sort == sort) {
@@ -307,7 +308,7 @@ private fun LibraryFilters(repository: FolioRepository, palette: MeridianPalette
                 repository.library.setPreferences(state.libraryPreferences.copy(descending = !state.libraryPreferences.descending))
             }
         }
-        Text("Colecciones", color = palette.ink, fontWeight = FontWeight.SemiBold)
+        Text("Colecciones", color = palette.onSurface, fontWeight = FontWeight.SemiBold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             LibraryAction("Todas", "library_collection_all", filter.collectionId == null) { onChange(filter.copy(collectionId = null)) }
             state.collections.forEach { collection ->
@@ -354,14 +355,14 @@ private fun LibraryDateField(label: String, tag: String, value: Long?, endOfDay:
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LibraryFolders(repository: FolioRepository, palette: MeridianPalette, onPickFolder: (((String) -> Unit) -> Unit)?) {
+private fun LibraryFolders(repository: FolioRepository, palette: ClayPalette, onPickFolder: (((String) -> Unit) -> Unit)?) {
     val state by repository.state.collectAsState()
     val progress by repository.library.progress.collectAsState()
     val scope = rememberCoroutineScope()
     var path by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxWidth().background(palette.elevatedSurface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Carpetas de la biblioteca", color = palette.ink, fontWeight = FontWeight.SemiBold)
-        Text("Los libros ausentes conservan su progreso y anotaciones. Android actualiza al reanudar o al pulsar Actualizar.", color = palette.inkSoft)
+    Column(Modifier.fillMaxWidth().background(palette.surfaceSecondary).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Carpetas de la biblioteca", color = palette.onSurface, fontWeight = FontWeight.SemiBold)
+        Text("Los libros ausentes conservan su progreso y anotaciones. Android actualiza al reanudar o al pulsar Actualizar.", color = palette.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (onPickFolder != null) LibraryAction("Elegir carpeta…", "library_pick_folder") { onPickFolder { repository.library.addFolder(it) } }
             OutlinedTextField(path, { path = it }, label = { Text("Ruta o URI de carpeta") }, singleLine = true,
@@ -373,8 +374,8 @@ private fun LibraryFolders(repository: FolioRepository, palette: MeridianPalette
         }
         state.watchedFolders.forEach { folder ->
             Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Text(folder.location, color = palette.ink)
-                Text("Última sincronización: " + (folder.lastSyncEpochMs?.let { kotlin.time.Instant.fromEpochMilliseconds(it).toString() } ?: "Nunca"), color = palette.inkSoft, fontSize = 12.sp)
+                Text(folder.location, color = palette.onSurface)
+                Text("Última sincronización: " + (folder.lastSyncEpochMs?.let { kotlin.time.Instant.fromEpochMilliseconds(it).toString() } ?: "Nunca"), color = palette.onSurfaceVariant, fontSize = 12.sp)
                 folder.lastError?.let { Text(it, color = palette.warningAmber) }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     LibraryAction("Incluir subcarpetas", "library_recursive_${folder.id}", folder.includeSubfolders) { repository.library.updateFolder(folder.copy(includeSubfolders = !folder.includeSubfolders)) }
@@ -388,7 +389,7 @@ private fun LibraryFolders(repository: FolioRepository, palette: MeridianPalette
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LibraryFileTools(repository: FolioRepository, palette: MeridianPalette, busy: Boolean,
+private fun LibraryFileTools(repository: FolioRepository, palette: ClayPalette, busy: Boolean,
     onPickFile: (((String) -> Unit) -> Unit)?, onPickExport: ((String, (String) -> Unit) -> Unit)?,
     onImport: (String) -> Unit, onCreated: () -> Unit, onMessage: (String) -> Unit,
 ) {
@@ -397,8 +398,8 @@ private fun LibraryFileTools(repository: FolioRepository, palette: MeridianPalet
     var author by remember { mutableStateOf("") }
     var format by remember { mutableStateOf(DocumentFormat.EPUB) }
     val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxWidth().background(palette.elevatedSurface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Importar / Crear / Exportar", color = palette.ink, fontWeight = FontWeight.SemiBold)
+    Column(Modifier.fillMaxWidth().background(palette.surfaceSecondary).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Importar / Crear / Exportar", color = palette.onSurface, fontWeight = FontWeight.SemiBold)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(path, { path = it }, label = { Text("Ruta de archivo PDF o EPUB") }, singleLine = true,
                 modifier = Modifier.width(300.dp).shioriTextFieldFocusGuard().testTag("library_file_path"))
@@ -428,7 +429,7 @@ private fun LibraryFileTools(repository: FolioRepository, palette: MeridianPalet
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?, palette: MeridianPalette,
+private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?, palette: ClayPalette,
     prefs: LibraryPreferences, selected: Boolean, selectionMode: Boolean, reminder: PageReminder?, onToggleSelection: () -> Unit, onOpen: () -> Unit,
     onExport: () -> Unit, onReload: () -> Unit, onEditMetadata: () -> Unit,
 ) {
@@ -438,16 +439,16 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
         return
     }
     val prediction = remember(book, telemetry) { ReadingPredictionEngine.computePrediction(book, telemetry) }
-    Surface(color = palette.pageSurface, shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) palette.accentGreen else palette.border),
+    Surface(color = palette.surfaceContainerLowest, shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) palette.primary else palette.outlineVariant),
         modifier = Modifier.fillMaxWidth().testTag("library_book_${book.id}")) {
         BoxWithConstraints {
         if (maxWidth >= 760.dp) {
             Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(selected, { onToggleSelection() }, modifier = Modifier.testTag("library_select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" })
                 Column(Modifier.weight(1.2f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(book.title, color = palette.ink, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(book.author, color = palette.inkSoft, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(book.title, color = palette.onSurface, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(book.author, color = palette.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (book.isMissingOnDisk) Text("No disponible en disco", color = palette.warningAmber, fontSize = 12.sp, modifier = Modifier.testTag("library_missing_${book.id}"))
                 }
                 if (detailed) Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -466,8 +467,8 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(selected, { onToggleSelection() }, modifier = Modifier.testTag("library_select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" })
                 Column(Modifier.weight(1f)) {
-                    Text(book.title, color = palette.ink, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(book.author, color = palette.inkSoft, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(book.title, color = palette.onSurface, fontFamily = FontFamily.Serif, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(book.author, color = palette.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 LibraryAction("Abrir", "library_open_${book.id}") { onOpen() }
                 LibraryAction("Metadatos", "library_edit_metadata_${book.id}") { onEditMetadata() }
@@ -487,17 +488,17 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
 
 @Composable
 private fun LibraryBookMetrics(book: BookDocument, telemetry: BookReadingTelemetry?, prediction: FinishTimePrediction,
-    palette: MeridianPalette, reminder: PageReminder?,
+    palette: ClayPalette, reminder: PageReminder?,
 ) {
-    Text("${book.format.name} · ${book.libraryStatus.label}", color = palette.inkSoft, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    Text("${book.format.name} · ${book.libraryStatus.label}", color = palette.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     LinearProgressIndicator(progress = { book.libraryProgress() }, modifier = Modifier.fillMaxWidth())
-    Text("${(book.libraryProgress() * 100).roundToInt()}% · ${book.totalPages} " + if (book.format == DocumentFormat.EPUB) "págs. estimadas" else "páginas", color = palette.inkSoft, fontSize = 12.sp)
-    Text("${prediction.formattedRemainingTime()} restantes · " + if ((telemetry?.totalActiveSeconds ?: 0.0) > 0) "Según tu ritmo" else "Estimado inicial", color = palette.inkSoft, fontSize = 12.sp)
-    reminder?.let { Text("Recordatorio · pág. ${it.pageNumber}: ${it.note}", color = palette.inkSoft, fontSize = 12.sp) }
+    Text("${(book.libraryProgress() * 100).roundToInt()}% · ${book.totalPages} " + if (book.format == DocumentFormat.EPUB) "págs. estimadas" else "páginas", color = palette.onSurfaceVariant, fontSize = 12.sp)
+    Text("${prediction.formattedRemainingTime()} restantes · " + if ((telemetry?.totalActiveSeconds ?: 0.0) > 0) "Según tu ritmo" else "Estimado inicial", color = palette.onSurfaceVariant, fontSize = 12.sp)
+    reminder?.let { Text("Recordatorio · pág. ${it.pageNumber}: ${it.note}", color = palette.onSurfaceVariant, fontSize = 12.sp) }
 }
 
 @Composable
-internal fun LibraryCover(book: BookDocument, palette: MeridianPalette) {
+internal fun LibraryCover(book: BookDocument, palette: ClayPalette) {
     val coverPath = remember(book.id, book.pages, book.coverImagePath) {
         book.coverImagePath?.takeIf { it.isNotBlank() }
             ?: book.pages.firstOrNull()?.blocks?.firstOrNull { it.style == BlockStyle.IMAGE }?.imagePath
@@ -509,24 +510,24 @@ internal fun LibraryCover(book: BookDocument, palette: MeridianPalette) {
             }
         }
     }
-    Box(Modifier.fillMaxSize().background(palette.elevatedSurface), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(palette.surfaceSecondary), contentAlignment = Alignment.Center) {
         val image = bitmap
         if (image != null) Image(image, "Portada de ${book.title}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Column(
             Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                listOf(palette.accentGreen.copy(alpha = 0.15f), palette.pageSurface, palette.elevatedSurface)))
+                listOf(palette.primary.copy(alpha = 0.15f), palette.surfaceContainerLowest, palette.surfaceSecondary)))
                 .padding(horizontal = 22.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.Center,
         ) {
-            Text(book.format.name + " /", color = palette.accentGreen, fontFamily = FontFamily.Monospace,
+            Text(book.format.name + " /", color = palette.primary, fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             Spacer(Modifier.height(18.dp))
-            Text(book.title, color = palette.ink, fontFamily = FontFamily.Serif, fontSize = 21.sp,
+            Text(book.title, color = palette.onSurface, fontFamily = FontFamily.Serif, fontSize = 21.sp,
                 lineHeight = 27.sp, fontWeight = FontWeight.Medium, maxLines = 5, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(18.dp))
-            HorizontalDivider(Modifier.width(32.dp), color = palette.accentGreen, thickness = 2.dp)
+            HorizontalDivider(Modifier.width(32.dp), color = palette.primary, thickness = 2.dp)
             Spacer(Modifier.height(12.dp))
-            Text(book.author, color = palette.inkSoft, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(book.author, color = palette.onSurfaceVariant, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
