@@ -9,7 +9,7 @@ description: Estructura de módulos, flujo de estado, persistencia, puntos expec
 | Módulo | Responsabilidad | Archivos clave |
 |---|---|---|
 | `:core` | Dominio, parsing, predicción, persistencia. Sin Compose. | `DocumentModels.kt`, `FolioRepository.kt`, `DocumentCodec.kt`, `ReadingPredictionEngine.kt`, `SampleLibrary.kt` |
-| `:ui` | Toda la UI compartida | `MeridianFolioApp.kt`, `MeridianTheme.kt`, `PlatformImageLoader.kt` |
+| `:ui` | Toda la UI compartida | `MeridianFolioApp.kt`, `ReaderViewModes.kt`, `PlatformImageLoader.kt` |
 | `:desktopApp` | Ventana JVM, diálogos de archivo AWT, icono | `Main.kt` |
 | `:androidApp` | Activity, SAF/picker | `MainActivity.kt` |
 
@@ -25,7 +25,7 @@ Source sets de `:core`: `commonMain`, `jvmSharedMain` (compartido desktop+androi
 - JSON en `~/.meridian-folio/meridian_folio_state.json`; imágenes extraídas en `~/.meridian-folio/media/<libro>/`.
 - `Json { ignoreUnknownKeys = true; encodeDefaults = true }` ⇒ **todo campo nuevo en un modelo `@Serializable` requiere valor por defecto**, o se pierde el estado existente del usuario.
 - Nunca renombrar campos ni valores de enum serializados; añadir nuevos.
-- `BookDocument.parserVersion`: al cambiar la salida del parser, subir la constante en `loadInitialState()` (actualmente `< 3`) para que los libros importados se re-parseen desde `filePath` conservando `id` y `currentPage`.
+- `BookDocument.parserVersion`: al cambiar la salida del parser, subir `DocumentCodec.CURRENT_PARSER_VERSION` (actualmente `5`) para que los libros importados se re-parseen desde `filePath` conservando `id` y `currentPage`.
 
 ## Costuras de plataforma (expect/actual)
 | Declaración | Desktop | Android |

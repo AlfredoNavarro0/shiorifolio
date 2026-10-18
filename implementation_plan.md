@@ -8,6 +8,9 @@ Este plan organiza los **10 bloques de requerimientos** en **6 iteraciones incre
 5. **Biblioteca avanzada ("Biblioteca") e importación/sincronización desde carpetas**.
 6. **Edición no destructiva de EPUB (Undo/Redo, buscar/reemplazar, reanclaje de notas) y respaldo/accesibilidad**.
 
+> [!WARNING]
+> **Dirección visual retirada (2026-10-18):** el sistema **Serene Vintage Reader** fue eliminado del repositorio. Las referencias visuales de las iteraciones 1–4 quedan como registro histórico; la interfaz se migrará al sistema **Tactile Claymorphism** del proyecto Stitch **"Claymorphic App Redesign"** (`projects/14806878120696973328`).
+
 > [!IMPORTANT]
 > **Invariantes en todas las iteraciones**:
 > - Todo nuevo campo en modelos `@Serializable` de [DocumentModels.kt](file:///c:/Users/terra/Documents/GitHub/Neuer%20Ordner/core/src/commonMain/kotlin/dev/meridian/folio/core/DocumentModels.kt) tendrá valor por defecto para no romper `~/.meridian-folio/meridian_folio_state.json`.

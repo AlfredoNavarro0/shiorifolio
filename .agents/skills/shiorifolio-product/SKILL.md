@@ -5,7 +5,7 @@ description: Visión, alcance funcional, invariantes de producto y backlog de Sh
 
 # ShioriFolio — Producto
 
-Lector **y editor** nativo de PDF/EPUB para Windows, Linux y Android (Compose Multiplatform). **No es una app web**: `index.html` en la raíz es un artefacto ajeno de una sesión anterior; no forma parte del producto.
+Lector **y editor** nativo de PDF/EPUB para Windows, Linux y Android (Compose Multiplatform). **No es una app web**.
 
 ## Funcionalidades no negociables
 Toda modificación debe conservar:
@@ -29,11 +29,9 @@ Toda modificación debe conservar:
 | # | Requisito | Nota técnica |
 |---|---|---|
 | 1 | Atajos de teclado: cambiar pestañas, página anterior/siguiente, ocultar dock central, ciclar modo de vista | `Modifier.onPreviewKeyEvent` en la raíz + `FocusRequester`; no capturar teclas mientras un `TextField` tiene foco |
-| 2 | Contraste en modo oscuro (inputs casi invisibles) | Causa raíz en `shiorifolio-design` → "Defecto conocido" |
-| 3 | El editor de recordatorio no se puede cerrar sin guardar | Añadir acción "Cancelar/✕" que ponga `showReminderEditor = false` |
-| 4 | Modo Zen: las hojas ocupan toda la ventana | Ocultar barra superior, dock y status bar; combinar con `onToggleFullscreen` de la plataforma |
-| 5 | Ajustes tipográficos: familia, peso y color de fuente; títulos de pestañas poco nítidos | Persistir en `FolioPersistedState` (con valores por defecto) |
-| 6 | La cinta marcapáginas tapa el encabezado `FOLIO N` | Reservar padding `end` en el header de `StitchBookSpreadLeaf` o mover la cinta fuera del área de texto |
+| 2 | El editor de recordatorio no se puede cerrar sin guardar | Añadir acción "Cancelar/✕" que ponga `showReminderEditor = false` |
+| 3 | Modo Zen: las hojas ocupan toda la ventana | Ocultar barra superior, dock y status bar; combinar con `onToggleFullscreen` de la plataforma |
+| 4 | Ajustes tipográficos: familia, peso y color de fuente; títulos de pestañas poco nítidos | Persistir en `FolioPersistedState` (con valores por defecto) |
 
-## Fuente del diseño
-Proyecto de Stitch **"Serene Vintage Reader"** (vistas Móvil Kindle y Escritorio). Ver skill `shiorifolio-design`.
+## Fuente del diseño (en migración)
+La dirección anterior (*Serene Vintage Reader*) fue retirada el 2026-10-18. El nuevo sistema visual es **Tactile Claymorphism**, del proyecto de Stitch **"Claymorphic App Redesign"** (`projects/14806878120696973328`).

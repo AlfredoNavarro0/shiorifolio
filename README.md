@@ -13,7 +13,10 @@
 
 ## Descripción General
 
-**ShioriFolio** (`shiorifolio`) es una aplicación nativa multiplataforma construida con **Kotlin Multiplatform** y **Compose Multiplatform** para **Windows, Linux y Android** (sin depender de un navegador web). Combina un lector literario inmersivo (inspirado en el diseño **Serene Vintage Reader** y dispositivos e-ink tipo Kindle) con un editor estructurado de documentos **PDF** y **EPUB**, telemetría de lectura en tiempo real y predicción adaptativa del tiempo restante de lectura.
+**ShioriFolio** (`shiorifolio`) es una aplicación nativa multiplataforma construida con **Kotlin Multiplatform** y **Compose Multiplatform** para **Windows, Linux y Android** (sin depender de un navegador web). Combina un lector literario inmersivo (pensado para lectura prolongada y dispositivos e-ink tipo Kindle) con un editor estructurado de documentos **PDF** y **EPUB**, telemetría de lectura en tiempo real y predicción adaptativa del tiempo restante de lectura.
+
+> [!NOTE]
+> La dirección visual anterior (*Serene Vintage Reader*) fue retirada. La interfaz se está migrando al sistema **Tactile Claymorphism** del proyecto Stitch **«Claymorphic App Redesign»**.
 
 ---
 
@@ -37,7 +40,7 @@
 - **4 Tonos de Papel y Temas (Claro / Oscuro) + Controles Tipográficos**:
   - **Kindle Cálido (`#FCF9F3`)**, **Sepia (`#F5EDDB`)**, **Salvia (`#EEF3EE`)** y **Oscuro / Noche (`#231F1C`)**.
   - Ajuste en vivo del tamaño de fuente (`A-` / `17pt` / `A+`) e interlineado (`1.5×`, `1.8×`, `2.1×`).
-- **Doble Interfaz Adaptativa (*Serene Vintage Reader*)**:
+- **Doble Interfaz Adaptativa**:
   - **Vista de Escritorio**: Barra editorial superior, pliego de doble página con cinta marcapáginas, dock flotante de comandos con deslizador de progreso y barra de telemetría inferior.
   - **Vista Móvil Kindle Edge-to-Edge**: HUD flotante translúcido, progreso superior a sangre, píldora flotante de ritmo de lectura y hoja desplegable de *Ajustes de Lectura Kindle*.
 
@@ -54,7 +57,7 @@ shiorifolio/
 │   ├── src/desktopMain/           # PlatformPdfEngine (Apache PDFBox + PDFRenderer)
 │   └── src/androidMain/           # PlatformPdfEngine (Android PdfRenderer)
 ├── ui/                            # Interfaz compartida en Compose Multiplatform
-│   ├── src/commonMain/            # MeridianFolioApp (Vistas Escritorio & Kindle Móvil), MeridianTheme
+│   ├── src/commonMain/            # MeridianFolioApp, workspaces y componentes compartidos
 │   ├── src/desktopMain/           # Decodificador de imágenes Skia (Desktop)
 │   └── src/androidMain/           # Decodificador de imágenes BitmapFactory (Android)
 ├── desktopApp/                    # Punto de entrada JVM Desktop (Windows / Linux) y empaquetado nativo

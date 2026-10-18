@@ -30,9 +30,7 @@ description: Checklist de revisión de código para ShioriFolio con criterios bl
 - Trabajo de I/O o render de PDF en el hilo de composición (usar `produceState` + `Dispatchers.Default`/`IO`, como `rememberLoadedImageBitmap`).
 
 **Diseño**
-- Color literal en composables fuera de las excepciones de `shiorifolio-design`.
-- Color nuevo de paleta definido en menos de cuatro temas.
-- Texto ilegible en `DARK` (verificar inputs y texto sobre `accentGreen`).
+- El sistema visual anterior fue retirado (2026-10-18); la UI está en migración a Claymorphism. Hasta que exista la nueva guía visual, los hallazgos de diseño se reportan como **Nota**, no como bloqueantes.
 
 ## Recomendados
 - Componente nuevo añadido a `MeridianFolioApp.kt` en vez de a un archivo propio.
