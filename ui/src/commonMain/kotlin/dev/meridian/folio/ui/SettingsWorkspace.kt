@@ -1060,6 +1060,7 @@ private fun SettingsContrastToggle(checked: Boolean, palette: ClayPalette, onTog
     Box(
         modifier = Modifier
             .size(64.dp, 36.dp)
+            .clip(shape)
             .clayFocusableClickable(palette, shape = shape, onClick = onToggle)
             .testTag("ui_high_contrast_toggle")
             .semantics {
