@@ -1,6 +1,7 @@
 package dev.meridian.folio.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,7 +43,6 @@ import dev.meridian.folio.ui.theme.ClayPalette
 import dev.meridian.folio.ui.theme.ClayPrimaryButton
 import dev.meridian.folio.ui.theme.ClaySpacing
 import dev.meridian.folio.ui.theme.LocalClayTypography
-import dev.meridian.folio.ui.theme.clayPressed
 import dev.meridian.folio.ui.theme.clayTextFieldColors
 
 /**
@@ -192,7 +192,16 @@ private fun LibraryHeader(
 @Composable
 private fun LibraryCountCapsule(palette: ClayPalette, visible: Int, total: Int) {
     val shape = RoundedCornerShape(percent = 50)
-    Box(Modifier.clip(shape).background(palette.surfaceSecondary).clayPressed(shape).padding(horizontal = ClaySpacing.sm, vertical = 6.dp)) {
+    // A filled capsule with a hairline edge (same recipe as the notebook counter): the shared
+    // `clayPressed` inset bands are sized for large cards and, at 16.dp blur, would paint an
+    // 8.dp band over the top/bottom of this short pill and hide the tally text.
+    Box(
+        Modifier
+            .clip(shape)
+            .background(palette.surfaceSecondary)
+            .border(1.dp, palette.primary.copy(alpha = 0.35f), shape)
+            .padding(horizontal = ClaySpacing.sm, vertical = 6.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(palette.primary))
             Text(

@@ -96,6 +96,11 @@ data class ReadingTone(
     val inkSoft: Color,
     val muted: Color,
     val border: Color,
+    /**
+     * Legible accent on [sheet] (≥3:1): the `primary` violet on the light sheets, a light violet
+     * on DARK, where `primary` only reaches ~2.9:1. Used by in-sheet accents such as `+ Frase`.
+     */
+    val accent: Color,
 )
 
 /** Token accessors for the Stitch "Tactile Claymorphism" design system. */
@@ -122,6 +127,7 @@ object ClayTokens {
                 inkSoft = Color(0xFF4A4238),
                 muted = Color(0xFF6E655A),
                 border = Color(0xFFE4DCD0),
+                accent = Color(0xFF7C3AED),
             )
             ReaderTheme.SEPIA -> ReadingTone(
                 isDark = false,
@@ -130,6 +136,7 @@ object ClayTokens {
                 inkSoft = Color(0xFF47392B),
                 muted = Color(0xFF6E5C49),
                 border = Color(0xFFDECBB3),
+                accent = Color(0xFF7C3AED),
             )
             ReaderTheme.SAGE -> ReadingTone(
                 isDark = false,
@@ -138,6 +145,7 @@ object ClayTokens {
                 inkSoft = Color(0xFF36433A),
                 muted = Color(0xFF5A695D),
                 border = Color(0xFFC8D6C9),
+                accent = Color(0xFF7C3AED),
             )
             ReaderTheme.DARK -> ReadingTone(
                 isDark = true,
@@ -146,6 +154,7 @@ object ClayTokens {
                 inkSoft = Color(0xFFD9D2E6),
                 muted = Color(0xFFB0A8BF),
                 border = Color(0xFF4A4455),
+                accent = Color(0xFFD2BBFF),
             )
         }
         if (!highContrast) return base

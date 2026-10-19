@@ -229,7 +229,7 @@ internal fun PagedBookBody(
                     color = tone.muted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
                 val text = pages[index].joinToString(" ") { it.text.text }
                 val candidate = remember(text) { extractCandidatePhrases(text).firstOrNull() }
-                if (candidate != null) Text("+ Frase", color = palette.primary, fontSize = 11.sp,
+                if (candidate != null) Text("+ Frase", color = tone.accent, fontSize = 11.sp,
                     modifier = Modifier.clayFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
             }
         }

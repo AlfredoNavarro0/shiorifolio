@@ -1,7 +1,6 @@
 package dev.meridian.folio.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,7 +32,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,7 +41,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -514,30 +511,38 @@ internal fun StitchDesktopReaderSpreadWorkspace(
         }
         // Optional Expandable Chapter TOC Jump Strip (records jump in Navigation History)
         if (!isZenControlsHidden && showTocBar && tocEntries.isNotEmpty()) {
+            val stripShape = RoundedCornerShape(ClayRadius.md)
             Row(
                 modifier = Modifier
                     .widthIn(max = 1240.dp)
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp)
-                    .horizontalScroll(rememberScrollState())
-                    .background(palette.surfaceSecondary, RoundedCornerShape(8.dp))
-                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(bottom = ClaySpacing.xs)
+                    .clip(stripShape)
+                    .background(palette.surfaceSecondary)
+                    .clayPressed(stripShape)
+                    .padding(horizontal = ClaySpacing.sm, vertical = ClaySpacing.xs)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Ir al capítulo:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Ir al capítulo:",
+                    color = palette.textMuted,
+                    style = LocalClayTypography.current.labelSm,
+                    maxLines = 1,
+                )
                 tocEntries.forEach { entry ->
                     val isCurrentChap = currentPageObj.chapterTitle.startsWith(entry.title)
+                    val chipShape = RoundedCornerShape(percent = 50)
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
+                            .clip(chipShape)
                             .background(if (isCurrentChap) palette.primary else palette.surfaceContainerLowest)
-                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
-                            .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                            .border(1.dp, palette.outlineVariant, chipShape)
+                            .clayFocusableClickable(palette, chipShape) {
                                 onJumpToChapter(entry.startPage, entry.title)
                             }
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                            .padding(horizontal = ClaySpacing.sm, vertical = 6.dp)
                             .testTag("toc_chapter_${entry.startPage}"),
                     ) {
                         Text(
@@ -545,6 +550,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                             color = if (isCurrentChap) palette.onPrimary else palette.onSurface,
                             fontSize = 11.sp,
                             fontWeight = if (isCurrentChap) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -958,19 +964,26 @@ internal fun StitchDesktopReaderSpreadWorkspace(
 
             // Floating Zen Mode Overlay Controls (when Zen Mode hides standard bars)
             if (isZenControlsHidden) {
-                Surface(
-                    color = palette.surfaceSecondary.copy(alpha = 0.94f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, palette.outlineVariant),
+                val zenShape = RoundedCornerShape(ClayRadius.md)
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 10.dp)
-                        .shadow(elevation = 6.dp, shape = RoundedCornerShape(10.dp)),
+                        .padding(bottom = ClaySpacing.xs),
                 ) {
+                    // Clay chrome bar: kit radius plus the floating shadow stack of the kit.
+                    ClayShadowBox(shadow = ClayShadows.floating, shape = zenShape, modifier = Modifier.matchParentSize()) {
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clip(zenShape)
+                                .background(palette.surfaceSecondary.copy(alpha = 0.94f))
+                                .border(1.dp, palette.outlineVariant, zenShape),
+                        )
+                    }
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = ClaySpacing.sm, vertical = ClaySpacing.xs),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                     ) {
                         Text(
                             text = "shiorifolio",
@@ -979,14 +992,15 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.5.sp,
                         )
+                        val zenPillShape = RoundedCornerShape(percent = 50)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(zenPillShape)
                                 .background(if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.surfaceContainerHigh else palette.disabledContainer)
                                 .clickable(enabled = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) {
                                     pagination.turn(book, step, -1, onPageChange)
                                 }
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = ClaySpacing.xs, vertical = 3.dp)
                                 .testTag("prev_page_button"),
                         ) {
                             Text("‹ Ant.", color = if (book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)) palette.onSurface else palette.disabledContent, fontSize = 11.sp)
@@ -1000,22 +1014,22 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                         )
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(zenPillShape)
                                 .background(if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.surfaceContainerHigh else palette.disabledContainer)
                                 .clickable(enabled = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) {
                                     pagination.turn(book, step, 1, onPageChange)
                                 }
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = ClaySpacing.xs, vertical = 3.dp)
                                 .testTag("next_page_button"),
                         ) {
                             Text("Sig. ›", color = if (book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)) palette.onSurface else palette.disabledContent, fontSize = 11.sp)
                         }
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(zenPillShape)
                                 .background(palette.primary)
                                 .clickable { onExitZenControls() }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .padding(horizontal = ClaySpacing.sm, vertical = 4.dp)
                                 .testTag("exit_zen_mode_btn"),
                         ) {
                             Text(
@@ -1027,11 +1041,11 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                         }
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(zenPillShape)
                                 .background(palette.surfaceContainerHigh)
-                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
+                                .border(1.dp, palette.outlineVariant, zenPillShape)
                                 .clickable { onToggleFullscreen() }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .padding(horizontal = ClaySpacing.xs, vertical = 4.dp),
                         ) {
                             Text(
                                 text = if (isFullscreen) "Salir Pantalla Completa" else "Pantalla Completa ⛶",
@@ -1508,15 +1522,16 @@ private fun StitchFloatingCommandDock(
                 }
 
                 // Live Telemetry Pill ("Ritmo: 7h 4m • 33s/pág (80 WPM)")
+                val telemetryShape = RoundedCornerShape(percent = 50)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(telemetryShape)
                         .background(palette.surfaceContainerHigh)
-                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
-                        .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) { onToggleTimer() }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .border(1.dp, palette.outlineVariant, telemetryShape)
+                        .clayFocusableClickable(palette = palette, shape = telemetryShape) { onToggleTimer() }
+                        .padding(horizontal = ClaySpacing.sm, vertical = 6.dp)
                         .testTag("prediction_badge"),
                 ) {
                     Box(

@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -192,38 +193,65 @@ internal fun SavedPhrasesVaultView(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Buscar palabra, nota o libro…") },
-                singleLine = true,
-                colors = textFieldColors,
-                modifier = Modifier
-                    .weight(1f)
-                    .widthIn(max = 380.dp)
-                    .shioriTextFieldFocusGuard()
-                    .testTag("lexicon_search_input"),
-            )
-            ClayChip(
-                label = "Filtrar",
-                selected = showFilters || toneFilter != null || statusFilter != null,
-                onClick = { showFilters = !showFilters },
-            )
-            Text(
-                "${filtered.size} de ${phrases.size}",
-                color = palette.textMuted,
-                style = typography.labelMd,
-            )
-            ClayPrimaryButton(
-                label = "+ Nueva entrada",
-                onClick = { showCapture = !showCapture },
-                tag = "notebook_new_entry_btn",
-            )
+        val filterActive = showFilters || toneFilter != null || statusFilter != null
+        val resultsLabel = "${filtered.size} de ${phrases.size}"
+        // Toolbar: one line when there is room, wrapped above it (search on its own row) otherwise.
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val stackedToolbar = maxWidth < 760.dp
+            val searchField: @Composable (Modifier) -> Unit = { modifier ->
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Buscar palabra, nota o libro…") },
+                    singleLine = true,
+                    colors = textFieldColors,
+                    modifier = modifier
+                        .shioriTextFieldFocusGuard()
+                        .testTag("lexicon_search_input"),
+                )
+            }
+            if (stackedToolbar) {
+                Column(verticalArrangement = Arrangement.spacedBy(ClaySpacing.xs)) {
+                    searchField(Modifier.fillMaxWidth())
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ClayChip(
+                            label = "Filtrar",
+                            selected = filterActive,
+                            onClick = { showFilters = !showFilters },
+                        )
+                        Text(resultsLabel, color = palette.textMuted, style = typography.labelMd)
+                        Spacer(modifier = Modifier.weight(1f))
+                        ClayPrimaryButton(
+                            label = "+ Nueva entrada",
+                            onClick = { showCapture = !showCapture },
+                            tag = "notebook_new_entry_btn",
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    searchField(Modifier.weight(1f).widthIn(max = 380.dp))
+                    ClayChip(
+                        label = "Filtrar",
+                        selected = filterActive,
+                        onClick = { showFilters = !showFilters },
+                    )
+                    Text(resultsLabel, color = palette.textMuted, style = typography.labelMd)
+                    ClayPrimaryButton(
+                        label = "+ Nueva entrada",
+                        onClick = { showCapture = !showCapture },
+                        tag = "notebook_new_entry_btn",
+                    )
+                }
+            }
         }
 
         feedback?.let { message ->
@@ -244,46 +272,33 @@ internal fun SavedPhrasesVaultView(
             )
         }
 
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(ClaySpacing.md),
         ) {
-            if (showCapture) {
-                // The scroll lives outside the card so the clay surface grows with the form
-                // (a card clipped to the viewport would paint no background below the fold).
-                Column(
-                    modifier = Modifier
-                        .width(NotebookCaptureWidth)
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    NotebookCapturePanel(
-                        palette = palette,
-                        books = books,
-                        selectedBook = captureBook,
-                        onSelectBook = { captureBookId = it },
-                        text = captureText,
-                        onTextChange = { captureText = it },
-                        note = captureNote,
-                        onNoteChange = { captureNote = it },
-                        tone = captureTone,
-                        onToneChange = { captureTone = it },
-                        onSave = ::saveCapture,
-                        onClose = { showCapture = false },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+            // Below ~1100dp the fixed 340dp capture column would crush the entry list,
+            // so the form and the list stack vertically instead of sharing the width.
+            val twoColumn = maxWidth >= 1100.dp
+            val entryGap = Arrangement.spacedBy(ClaySpacing.md)
+            val capturePanel: @Composable () -> Unit = {
+                NotebookCapturePanel(
+                    palette = palette,
+                    books = books,
+                    selectedBook = captureBook,
+                    onSelectBook = { captureBookId = it },
+                    text = captureText,
+                    onTextChange = { captureText = it },
+                    note = captureNote,
+                    onNoteChange = { captureNote = it },
+                    tone = captureTone,
+                    onToneChange = { captureTone = it },
+                    onSave = ::saveCapture,
+                    onClose = { showCapture = false },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(ClaySpacing.md),
-            ) {
+            val entries: @Composable () -> Unit = {
                 if (filtered.isEmpty()) {
                     NotebookEmptyState(
                         palette = palette,
@@ -317,6 +332,47 @@ internal fun SavedPhrasesVaultView(
                             onReattach = { onReattachPhrase(item.id) },
                         )
                     }
+                }
+            }
+            if (twoColumn) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = entryGap,
+                ) {
+                    if (showCapture) {
+                        // The scroll lives outside the card so the clay surface grows with the form
+                        // (a card clipped to the viewport would paint no background below the fold).
+                        Column(
+                            modifier = Modifier
+                                .width(NotebookCaptureWidth)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            capturePanel()
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = entryGap,
+                    ) {
+                        entries()
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = entryGap,
+                ) {
+                    if (showCapture) {
+                        capturePanel()
+                    }
+                    entries()
                 }
             }
         }
