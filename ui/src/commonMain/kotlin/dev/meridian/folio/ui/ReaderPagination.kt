@@ -218,7 +218,7 @@ internal fun PagedBookBody(
                                 val image = bitmap
                                 if (image != null) Image(image, "Ilustración de la página ${page.pageNumber}", Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit,
-                                    colorFilter = pdfPageImageColorFilter(palette, tone, pdfPageColorMode, book.format == DocumentFormat.PDF, false))
+                                    colorFilter = pdfPageImageColorFilter(tone, pdfPageColorMode, book.format == DocumentFormat.PDF, false))
                             }
                         } else Text(piece.text, style = piece.style, modifier = Modifier.fillMaxWidth())
                     }
@@ -229,7 +229,7 @@ internal fun PagedBookBody(
                     color = tone.muted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
                 val text = pages[index].joinToString(" ") { it.text.text }
                 val candidate = remember(text) { extractCandidatePhrases(text).firstOrNull() }
-                if (candidate != null) Text("+ Frase", color = tone.ink, fontSize = 11.sp,
+                if (candidate != null) Text("+ Frase", color = palette.primary, fontSize = 11.sp,
                     modifier = Modifier.clayFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
             }
         }

@@ -410,8 +410,11 @@ private fun ReaderBookStrip(
                 .testTag("reader_book_strip"),
         ) {
             Box(Modifier.matchParentSize().clayFrosted(shape, surface = palette.cardSurface))
+            // Centring the row vertically removes the dead space left by the 64.dp minimum
+            // height when the content is shorter than the bar.
             Row(
                 modifier = Modifier
+                    .align(Alignment.Center)
                     .fillMaxWidth()
                     .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1134,6 +1137,10 @@ internal fun readingHighlight(tone: ReadingTone, highlight: HighlightTone): Colo
  * Clay sheet card: a [ClayShadows.card] card tinted with [ReadingTone.sheet] and outlined
  * with [ReadingTone.border]. Used by the open spread and every single-sheet view mode so
  * the reading surface — and only it — follows the reader theme.
+ *
+ * The outline is applied to the host box, so it is painted after the sheet fill *and* the
+ * sheet content: an opaque leaf that repaints its own `tone.sheet` (e.g. the spread leaf)
+ * can no longer hide the card edge, while the outer drop shadow layers stay behind.
  */
 @Composable
 internal fun ReaderSheetCard(
@@ -1142,7 +1149,11 @@ internal fun ReaderSheetCard(
     shape: RoundedCornerShape = RoundedCornerShape(ClayRadius.lg),
     content: @Composable BoxScope.() -> Unit,
 ) {
-    ClayShadowBox(shadow = ClayShadows.card, shape = shape, modifier = modifier) {
+    ClayShadowBox(
+        shadow = ClayShadows.card,
+        shape = shape,
+        modifier = modifier.border(1.dp, tone.border, shape),
+    ) {
         Box(Modifier.matchParentSize().background(tone.sheet, shape))
         content()
     }
@@ -1191,7 +1202,6 @@ private fun ReaderPageChevron(
  * covers and illustrations never turn into photo-negatives unless SMART_DARK is chosen.
  */
 internal fun pdfPageImageColorFilter(
-    palette: ClayPalette,
     tone: ReadingTone,
     mode: PdfPageColorMode,
     isPdfDocument: Boolean,
@@ -1265,9 +1275,8 @@ internal fun StitchBookSpreadLeaf(
     }
     val isSingleImageLeaf = imageBlocks.size == 1 && nonEmptyTextBlocks.isEmpty()
 
-    val pdfColorFilter = remember(palette, tone, pdfPageColorMode, book.format, isSingleImageLeaf) {
+    val pdfColorFilter = remember(tone, pdfPageColorMode, book.format, isSingleImageLeaf) {
         pdfPageImageColorFilter(
-            palette = palette,
             tone = tone,
             mode = pdfPageColorMode,
             isPdfDocument = book.format == DocumentFormat.PDF,
@@ -1510,41 +1519,47 @@ private fun StitchFloatingCommandDock(
                     )
                 }
 
-                // Interactive Scrubber Slider (0% — Slider — 100%)
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = "${(prediction.completionFraction * 100).roundToInt()}%",
-                        color = palette.textMuted,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                    )
-                    Slider(
-                        value = sliderPage,
-                        onValueChange = { sliderPage = it },
-                        onValueChangeFinished = {
-                            onPageChange(sliderPage.roundToInt().coerceIn(1, book.totalPages))
-                        },
-                        valueRange = 1f..book.totalPages.coerceAtLeast(2).toFloat(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = palette.primary,
-                            activeTrackColor = palette.primary,
-                            inactiveTrackColor = palette.outlineVariant,
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(22.dp)
-                            .testTag("reader_progress_slider"),
-                    )
-                    Text(
-                        text = "100%",
-                        color = palette.textMuted,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                    )
+                // Interactive Scrubber Slider (0% — Slider — 100%). A single-page document has
+                // no page 2 to announce, so the scrubber is hidden rather than offered as a
+                // seek target that does not exist.
+                if (book.totalPages > 1) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "${(prediction.completionFraction * 100).roundToInt()}%",
+                            color = palette.textMuted,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                        )
+                        Slider(
+                            value = sliderPage,
+                            onValueChange = { sliderPage = it },
+                            onValueChangeFinished = {
+                                onPageChange(sliderPage.roundToInt().coerceIn(1, book.totalPages))
+                            },
+                            valueRange = 1f..book.totalPages.coerceAtLeast(2).toFloat(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = palette.primary,
+                                activeTrackColor = palette.primary,
+                                inactiveTrackColor = palette.outlineVariant,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(22.dp)
+                                .testTag("reader_progress_slider"),
+                        )
+                        Text(
+                            text = "100%",
+                            color = palette.textMuted,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
 
                 // Live Telemetry Pill ("Ritmo: 7h 4m • 33s/pág (80 WPM)")
@@ -1812,10 +1827,12 @@ internal fun PageReminderBanner(
     }
 
     val textFieldColors = clayTextFieldColors(palette)
+    val reminderShape = RoundedCornerShape(14.dp)
 
-    Surface(
-        color = palette.surfaceContainerLowest,
-        border = BorderStroke(1.dp, palette.outlineVariant),
+    // Clay restyle: the reminder banner is a frosted [ClayShadows.card] surface instead of an
+    // M3 Surface. The card content sizes the outer Box and the shadow/frosted layers ride
+    // along as matchParentSize siblings (ClayShadowBox cannot size itself).
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 3.dp)
@@ -1828,8 +1845,16 @@ internal fun PageReminderBanner(
                 }
             }
             .testTag("page_reminder_banner"),
-        shape = RoundedCornerShape(14.dp),
     ) {
+        ClayShadowBox(
+            shadow = ClayShadows.card,
+            shape = reminderShape,
+            modifier = Modifier
+                .matchParentSize()
+                .border(1.dp, palette.outlineVariant, reminderShape),
+        ) {
+            Box(Modifier.matchParentSize().clayFrosted(reminderShape, surface = palette.surfaceContainerLowest))
+        }
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
             if (reminder != null && !showEditor) {
                 Row(
@@ -1995,15 +2020,24 @@ internal fun QuickMarkPhraseBar(
     onClose: () -> Unit,
 ) {
     val textFieldColors = clayTextFieldColors(palette)
+    val barShape = RoundedCornerShape(8.dp)
 
-    Surface(
-        color = palette.surfaceContainerLowest,
-        border = BorderStroke(1.dp, palette.primary),
-        shape = RoundedCornerShape(8.dp),
+    // Clay restyle: frosted clay card with a `primary` outline marking the active editor,
+    // replacing the former M3 Surface (same tags/behavior, clay look).
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 4.dp),
     ) {
+        ClayShadowBox(
+            shadow = ClayShadows.card,
+            shape = barShape,
+            modifier = Modifier
+                .matchParentSize()
+                .border(1.dp, palette.primary, barShape),
+        ) {
+            Box(Modifier.matchParentSize().clayFrosted(barShape, surface = palette.surfaceContainerLowest))
+        }
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

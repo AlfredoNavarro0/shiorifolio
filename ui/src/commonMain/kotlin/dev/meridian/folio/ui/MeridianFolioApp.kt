@@ -1095,9 +1095,8 @@ private fun StitchMobileKindleReaderLayout(
     }
     val isSingleImagePage = imageBlocks.size == 1 && nonEmptyTextBlocks.isEmpty()
 
-    val pdfColorFilter = remember(palette, tone, pdfPageColorMode, book.format, isSingleImagePage) {
+    val pdfColorFilter = remember(tone, pdfPageColorMode, book.format, isSingleImagePage) {
         pdfPageImageColorFilter(
-            palette = palette,
             tone = tone,
             mode = pdfPageColorMode,
             isPdfDocument = book.format == DocumentFormat.PDF,

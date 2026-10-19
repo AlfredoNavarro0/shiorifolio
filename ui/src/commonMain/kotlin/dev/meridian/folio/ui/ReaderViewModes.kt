@@ -279,7 +279,6 @@ internal fun VerticalContinuousReaderCanvas(
                 ) {
                     items(reconstruction.items, key = { "${book.id}_cont_${it.id}_${it.sourcePageNumber}" }) { item ->
                         ReflowBlockItemView(
-                            palette = palette,
                             tone = tone,
                             pdfPageColorMode = pdfPageColorMode,
                             book = book,
@@ -474,7 +473,9 @@ internal fun ReflowStatusAndReliabilityBanner(
                 Text(
                     text = reliabilityWarning
                         ?: "Flujo continuo reconstruido (saltos de página unidos: $mergedPageBreaks · guiones unidos: $dehyphenatedWords · archivo original preservado).",
-                    color = if (!isReliable) palette.warningAmber else tone.inkSoft,
+                    // The amber border carries the warning signal; the copy itself is painted in
+                    // tone ink so it stays legible on every sheet (amber on tone.sheet is ~2-3:1).
+                    color = if (!isReliable) tone.ink else tone.inkSoft,
                     fontSize = 11.5.sp,
                     fontWeight = if (!isReliable) FontWeight.SemiBold else FontWeight.Normal,
                 )
@@ -530,7 +531,6 @@ internal fun ReflowStatusAndReliabilityBanner(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReflowBlockItemView(
-    palette: ClayPalette,
     tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
@@ -556,14 +556,14 @@ private fun ReflowBlockItemView(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.outlineVariant))
+            Box(modifier = Modifier.width(36.dp).height(1.dp).background(tone.border))
             Text(
                 text = "  ✦  ✦  ✦  ",
-                color = palette.warningAmber,
+                color = tone.muted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Box(modifier = Modifier.width(36.dp).height(1.dp).background(palette.outlineVariant))
+            Box(modifier = Modifier.width(36.dp).height(1.dp).background(tone.border))
         }
         return
     }
@@ -577,7 +577,6 @@ private fun ReflowBlockItemView(
         )
         if (bmp != null) {
             val pdfFilter = pdfPageImageColorFilter(
-                palette = palette,
                 tone = tone,
                 mode = pdfPageColorMode,
                 isPdfDocument = book.format == DocumentFormat.PDF,
@@ -657,7 +656,7 @@ private fun ReflowBlockItemView(
 
             BlockStyle.QUOTE -> {
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Box(modifier = Modifier.width(2.5.dp).height(44.dp).background(palette.warningAmber))
+                    Box(modifier = Modifier.width(2.5.dp).height(44.dp).background(tone.muted))
                     Spacer(modifier = Modifier.width(14.dp))
                     Text(
                         text = annotated,
