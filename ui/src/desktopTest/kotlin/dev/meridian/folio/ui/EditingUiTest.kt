@@ -18,6 +18,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Iteration 6: non-destructive editing, re-anchoring and portable backup from the UI. */
@@ -153,6 +154,67 @@ class EditingUiTest {
         val reattached = repo.state.value.savedPhrases.first { it.id == phrase.id }
         assertEquals(AnchorStatus.ACTIVE, reattached.anchorStatus)
         assertEquals(3, reattached.pageNumber)
+    }
+
+    @Test
+    fun notebookWorkspaceCapturesFiltersAndOpensEntries() = runComposeUiTest {
+        val repo = newRepo()
+        val book = repo.currentBook()!!
+        val keystone = repo.saveWordOrPhrase(
+            bookId = book.id,
+            pageNumber = 1,
+            phrase = "keystone load",
+            contextSentence = "Every arch was laid by masons who measured span and keystone load by compass rose.",
+            note = "carga de la clave",
+            tone = HighlightTone.SAGE,
+        )!!
+        val copperplate = repo.saveWordOrPhrase(
+            bookId = book.id,
+            pageNumber = 2,
+            phrase = "copperplate",
+            contextSentence = "Copperplate engraving",
+            note = "",
+            tone = HighlightTone.AMBER,
+        )!!
+
+        setContent { MeridianFolioApp(repository = repo) }
+        onNodeWithTag("section_tab_LEXICON").performClick()
+        waitForIdle()
+
+        onNodeWithTag("notebook_header").assertExists()
+        onNodeWithTag("notebook_count").assertExists()
+        onNodeWithTag("notebook_entry_${keystone.id}").assertExists()
+        onNodeWithTag("notebook_entry_${copperplate.id}").assertExists()
+
+        // The search keeps only the entries whose real fields match.
+        onNodeWithTag("lexicon_search_input").performTextReplacement("keystone")
+        waitForIdle()
+        onNodeWithTag("notebook_entry_${keystone.id}").assertExists()
+        onNodeWithTag("notebook_entry_${copperplate.id}").assertDoesNotExist()
+
+        onNodeWithTag("lexicon_search_input").performTextReplacement("")
+        waitForIdle()
+
+        // Capture form: real book context, required text, note and a real highlight tone.
+        onNodeWithTag("notebook_new_entry_btn").performClick()
+        waitForIdle()
+        onNodeWithTag("notebook_capture_book").assertExists()
+        onNodeWithTag("notebook_capture_text").performTextReplacement("waybill ledger")
+        onNodeWithTag("notebook_capture_note").performTextReplacement("registro de guías")
+        onNodeWithTag("notebook_capture_tone_AMBER").performScrollTo().performClick()
+        onNodeWithTag("notebook_capture_save").performScrollTo().performClick()
+        waitForIdle()
+
+        val saved = assertNotNull(repo.state.value.savedPhrases.firstOrNull { it.phrase == "waybill ledger" })
+        assertEquals(HighlightTone.AMBER, saved.tone)
+        assertEquals("registro de guías", saved.note)
+        assertEquals(book.id, saved.bookId)
+        onNodeWithTag("notebook_entry_${saved.id}").performScrollTo().assertExists()
+
+        onNodeWithTag("phrase_delete_${saved.id}").performScrollTo().performClick()
+        waitForIdle()
+        assertTrue(repo.state.value.savedPhrases.none { it.id == saved.id })
+        onNodeWithTag("notebook_entry_${saved.id}").assertDoesNotExist()
     }
 
     @Test

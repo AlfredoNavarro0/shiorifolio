@@ -27,14 +27,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -77,14 +74,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.meridian.folio.core.AnchorStatus
 import dev.meridian.folio.core.BackupPeek
 import dev.meridian.folio.core.BlockStyle
 import dev.meridian.folio.core.BookDocument
@@ -933,26 +928,9 @@ fun MeridianFolioApp(
                                 )
 
                                 MeridianSection.LEXICON -> SavedPhrasesVaultView(
+                                    repository = repository,
                                     palette = palette,
-                                    allPhrases = state.savedPhrases,
-                                    currentBook = currentBook,
-                                    onSaveNewPhrase = { phrase, note, tone ->
-                                        val pageObj = currentBook.pages.find { it.pageNumber == currentBook.currentPage }
-                                        repository.saveWordOrPhrase(
-                                            bookId = currentBook.id,
-                                            pageNumber = currentBook.currentPage,
-                                            phrase = phrase,
-                                            contextSentence = pageObj?.blocks?.firstOrNull()?.text ?: phrase,
-                                            note = note,
-                                            tone = tone,
-                                        )
-                                        statusBannerMessage = "Añadido \"$phrase\" a Palabras y Frases Guardadas."
-                                    },
-                                    onJumpToPhrase = { phrase ->
-                                        repository.jumpToLocation(phrase.bookId, phrase.pageNumber, "Cita: ${phrase.phrase.take(24)}")
-                                        activeSection = MeridianSection.READER
-                                    },
-                                    onDeletePhrase = { repository.deleteSavedPhrase(it) },
+                                    onOpenReader = { activeSection = MeridianSection.READER },
                                     onReattachPhrase = { reattachPhraseId = it },
                                 )
 
@@ -2029,249 +2007,3 @@ internal fun extractCandidatePhrases(text: String): List<String> {
     val secondChunk = words.drop(midStart).take(3).joinToString(" ")
     return listOf(firstChunk, secondChunk).distinct().filter { it.length >= 8 }
 }
-
-/**
- * SAVED WORDS & PHRASES VAULT (LEXICON)
- */
-@Composable
-private fun SavedPhrasesVaultView(
-    palette: ClayPalette,
-    allPhrases: List<SavedPhrase>,
-    currentBook: BookDocument,
-    onSaveNewPhrase: (phrase: String, note: String, tone: HighlightTone) -> Unit,
-    onJumpToPhrase: (SavedPhrase) -> Unit,
-    onDeletePhrase: (String) -> Unit,
-    onReattachPhrase: (String) -> Unit,
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    var newPhraseText by remember { mutableStateOf("") }
-    var newPhraseNote by remember { mutableStateOf("") }
-    var selectedTone by remember { mutableStateOf(HighlightTone.SAGE) }
-    val textFieldColors = clayTextFieldColors(palette)
-
-    val filtered = remember(allPhrases, searchQuery) {
-        if (searchQuery.isBlank()) {
-            allPhrases
-        } else {
-            val q = searchQuery.trim().lowercase()
-            allPhrases.filter {
-                it.phrase.lowercase().contains(q) ||
-                    it.note.lowercase().contains(q) ||
-                    it.bookTitle.lowercase().contains(q)
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-    ) {
-        Surface(
-            color = palette.surfaceContainerLowest,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, palette.outlineVariant),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "MARK & SAVE NEW WORD OR PHRASE FROM ${currentBook.title.uppercase()} (PAGE ${currentBook.currentPage})",
-                    color = palette.onSurface,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = newPhraseText,
-                        onValueChange = { newPhraseText = it },
-                        label = { Text("Word or Phrase", fontSize = 11.sp) },
-                        singleLine = true,
-                        colors = textFieldColors,
-                        modifier = Modifier
-                            .weight(1f)
-                            .shioriTextFieldFocusGuard(),
-                    )
-                    OutlinedTextField(
-                        value = newPhraseNote,
-                        onValueChange = { newPhraseNote = it },
-                        label = { Text("Definition / Note", fontSize = 11.sp) },
-                        singleLine = true,
-                        colors = textFieldColors,
-                        modifier = Modifier
-                            .weight(1f)
-                            .shioriTextFieldFocusGuard(),
-                    )
-                    HighlightTone.entries.forEach { t ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(palette.highlightColor(t))
-                                .border(
-                                    width = if (t == selectedTone) 2.dp else 1.dp,
-                                    color = if (t == selectedTone) palette.onSurface else palette.outlineVariant,
-                                    shape = RoundedCornerShape(4.dp),
-                                )
-                                .clickable { selectedTone = t }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        ) {
-                            Text(t.label, color = palette.onSurface, fontSize = 11.sp)
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            if (newPhraseText.isNotBlank()) {
-                                onSaveNewPhrase(newPhraseText, newPhraseNote, selectedTone)
-                                newPhraseText = ""
-                                newPhraseNote = ""
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = palette.primary, contentColor = palette.onPrimary),
-                    ) {
-                        Text("Save", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Saved Words & Phrases (${filtered.size})",
-                color = palette.onSurface,
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 20.sp,
-            )
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Search saved words & phrases...", fontSize = 11.sp) },
-                singleLine = true,
-                colors = textFieldColors,
-                modifier = Modifier
-                    .width(280.dp)
-                    .shioriTextFieldFocusGuard()
-                    .testTag("lexicon_search_input"),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            filtered.forEach { item ->
-                Surface(
-                    color = palette.surfaceContainerLowest,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, palette.outlineVariant),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(palette.highlightColor(item.tone))
-                                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                                ) {
-                                    Text(
-                                        text = "\"${item.phrase}\"",
-                                        color = palette.onSurface,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                    )
-                                }
-                                Text(
-                                    text = "${item.bookTitle} · Page ${item.pageNumber}",
-                                    color = palette.textMuted,
-                                    fontSize = 12.sp,
-                                )
-                                if (item.anchorStatus == AnchorStatus.ORPHANED) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(palette.warningAmber.copy(alpha = 0.18f))
-                                            .border(1.dp, palette.warningAmber, RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            .semantics { contentDescription = "Anotación huérfana: el texto anclado ya no coincide con la página" },
-                                    ) {
-                                        Text(
-                                            text = "Huérfana",
-                                            color = palette.warningAmber,
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Context: \"${item.contextSentence}\"",
-                                color = palette.onSurfaceVariant,
-                                fontStyle = FontStyle.Italic,
-                                fontSize = 12.5.sp,
-                            )
-                            if (item.note.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Note: ${item.note}",
-                                    color = palette.onSurface,
-                                    fontSize = 12.5.sp,
-                                )
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (item.anchorStatus == AnchorStatus.ORPHANED) {
-                                OutlinedButton(
-                                    onClick = { onReattachPhrase(item.id) },
-                                    border = BorderStroke(1.dp, palette.warningAmber),
-                                    modifier = Modifier.testTag("reattach_phrase_${item.id}"),
-                                ) {
-                                    Text("Reanclar", color = palette.warningAmber, fontSize = 12.sp)
-                                }
-                            }
-                            OutlinedButton(
-                                onClick = { onJumpToPhrase(item) },
-                                border = BorderStroke(1.dp, palette.outlineVariant),
-                            ) {
-                                Text("Open Page ${item.pageNumber}", color = palette.onSurface, fontSize = 12.sp)
-                            }
-                            OutlinedButton(
-                                onClick = { onDeletePhrase(item.id) },
-                                border = BorderStroke(1.dp, palette.outlineVariant),
-                            ) {
-                                Text("Delete", color = palette.textMuted, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
