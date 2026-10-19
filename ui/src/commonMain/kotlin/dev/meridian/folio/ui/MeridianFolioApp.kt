@@ -986,6 +986,7 @@ fun MeridianFolioApp(
                                     onExportBackup = handleExportBackup,
                                     onImportBackup = handleImportBackup,
                                     dataStatusMessage = backupStatusMessage,
+                                    onOpenReader = { activeSection = MeridianSection.READER },
                                 )
                             }
                         }

@@ -295,6 +295,42 @@ class MeridianFolioUiTest {
         waitForIdle()
         assertEquals(PageViewMode.ONE_COLUMN, repo.state.value.viewMode)
     }
+
+    @Test
+    fun settingsToneCardsAndLivePreviewBehave() = runComposeUiTest {
+        val repo = FolioRepository(persistToDisk = false)
+
+        setContent {
+            MeridianFolioApp(repository = repo)
+        }
+
+        onNodeWithTag("section_tab_SETTINGS").performClick()
+        waitForIdle()
+
+        // Clay header and the live preview built from the real current settings.
+        onNodeWithTag("settings_workspace_view").assertExists()
+        onNodeWithTag("settings_header").assertExists()
+        onNodeWithTag("settings_preview_card").assertExists()
+
+        // The four real tone cards exist; selecting one drives the repository theme.
+        ReaderTheme.entries.forEach { value ->
+            onNodeWithTag("settings_tone_card_${value.name}").assertExists()
+        }
+        onNodeWithTag("settings_theme_DARK").performScrollTo().performClick()
+        waitForIdle()
+        assertEquals(ReaderTheme.DARK, repo.state.value.theme)
+        onNodeWithTag("settings_theme_WHITE").performScrollTo().performClick()
+        waitForIdle()
+        assertEquals(ReaderTheme.WHITE, repo.state.value.theme)
+
+        // The immersive shortcut row opens the Reader through its real binding.
+        onNodeWithTag("settings_category_shortcuts").performClick()
+        waitForIdle()
+        onNodeWithTag("settings_try_reader_btn").performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithTag("settings_workspace_view").assertDoesNotExist()
+        onNodeWithTag("reader_page_indicator").assertExists()
+    }
 }
 
 private val androidx.compose.ui.graphics.Color.luminance: Float
