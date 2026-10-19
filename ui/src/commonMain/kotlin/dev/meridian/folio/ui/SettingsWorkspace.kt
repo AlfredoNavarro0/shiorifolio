@@ -705,7 +705,9 @@ private fun SettingsCategoryTabs(
                 .clip(shape)
                 .background(palette.surfaceSecondary.copy(alpha = 0.7f))
                 .clayPressed(shape)
-                .padding(ClaySpacing.xs),
+                // `clayPressed` paints an inset band 4..12dp inside the edge; padding children by
+                // `sm` keeps the tabs (and the active fill) clear of it.
+                .padding(ClaySpacing.sm),
         ) {
             Row(
                 modifier = Modifier
@@ -727,7 +729,7 @@ private fun SettingsCategoryTabs(
     }
 }
 
-/** One clay tab: filled `primary` when active (mock: primary-container) with dot + glyph. */
+/** One clay tab: filled `primary-container` when active (mock) with dot + glyph. */
 @Composable
 private fun SettingsCategoryTab(
     entry: SettingsCategory,
@@ -741,18 +743,18 @@ private fun SettingsCategoryTab(
         modifier = modifier
             .heightIn(min = 46.dp)
             .clip(shape)
-            .background(if (selected) palette.primary else Color.Transparent)
+            .background(if (selected) palette.primaryContainer else Color.Transparent)
             .clayFocusableClickable(palette, shape = shape, onClick = { onSelect(entry) })
             .testTag("settings_category_${entry.id}")
             .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs, Alignment.CenterHorizontally),
     ) {
-        if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(palette.onPrimary))
+        if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(palette.onPrimaryContainer))
         Text(entry.glyph, fontSize = 15.sp)
         Text(
             entry.label,
-            color = if (selected) palette.onPrimary else palette.onSurfaceVariant,
+            color = if (selected) palette.onPrimaryContainer else palette.onSurfaceVariant,
             style = LocalClayTypography.current.labelLg,
             maxLines = 2,
             textAlign = TextAlign.Center,
@@ -902,7 +904,8 @@ private fun SettingsFamilyWell(
                 .clip(shape)
                 .background(palette.surfaceSecondary.copy(alpha = 0.8f))
                 .clayPressed(shape)
-                .padding(ClaySpacing.xs),
+                // Keep the family pills clear of the 4..12dp inset band `clayPressed` paints.
+                .padding(ClaySpacing.sm),
         ) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs), verticalArrangement = Arrangement.spacedBy(ClaySpacing.xs)) {
                 UiFontFamilyOption.entries.forEach { value ->
@@ -1057,18 +1060,25 @@ private fun SettingsContrastToggle(checked: Boolean, palette: ClayPalette, onTog
     Box(
         modifier = Modifier
             .size(64.dp, 36.dp)
-            .clip(shape)
-            .background(if (checked) palette.primary else palette.surfaceContainerHigh)
-            .clayPressed(shape)
             .clayFocusableClickable(palette, shape = shape, onClick = onToggle)
             .testTag("ui_high_contrast_toggle")
             .semantics {
                 role = Role.Switch
                 toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-                contentDescription = "Contraste Alto Táctil"
+                // No `contentDescription` here: the row's visible "Contraste Alto Táctil" label
+                // already names this control, so adding one would announce the same string twice.
             },
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
+        // Recessed track painted behind; the knob is a sibling drawn above it so the inset bands
+        // `clayPressed` paints (4..12dp inside the edge) never shave the knob's own edge.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(shape)
+                .background(if (checked) palette.primary else palette.surfaceContainerHigh)
+                .clayPressed(shape),
+        )
         Box(
             modifier = Modifier
                 .padding(4.dp)
@@ -1307,13 +1317,16 @@ private fun SettingsStepper(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        SettingsPill(value, palette, accent, tag)
+        SettingsPill(value, palette, accent, "${tag}_label")
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
         ) {
             SettingsRoundStepButton("−", "${tag}_dec_btn", palette, "Disminuir $tag", onDecrease)
+            // 12dp recessed track: the whole bar sits inside the `clayPressed` inset bands, but it
+            // holds only decorative fills (background + accent progress), no text or icon, so the
+            // bands simply read as the sunken edge. Left as-is on purpose.
             Box(
                 modifier = Modifier
                     .weight(1f)

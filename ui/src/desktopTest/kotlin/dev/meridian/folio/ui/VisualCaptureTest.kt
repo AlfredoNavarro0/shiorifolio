@@ -12,8 +12,8 @@ import kotlin.test.assertTrue
 
 /**
  * Task 11a (visual fidelity pass): renders the four desktop surfaces of the real
- * [MeridianFolioApp] shell at a wide and a narrow window size and writes one PNG per surface
- * into `ui/build/visual/`.
+ * [MeridianFolioApp] shell at a wide, a mid and a narrow window size and writes one PNG per
+ * surface and size into `ui/build/visual/`.
  *
  * The tests are read-only: they use an in-memory [FolioRepository] and never assert business
  * behaviour. Their job is to prove the captures are real (non-empty, correctly sized images),
@@ -34,7 +34,12 @@ class VisualCaptureTest {
     )
 
     @Test
-    fun wideSurfacesRenderAtDesktopSize() = captureSurfaces(sizeTag = "wide", width = 1440, height = 900)
+    fun desktopSurfacesRenderAtWideAndMidWidths() {
+        captureSurfaces(sizeTag = "wide", width = 1440, height = 900)
+        // Mid width: still above the reader's 700dp mobile switch, and inside the 700..1040dp band
+        // that no other capture covers, so the single-column responsive paths get exercised too.
+        captureSurfaces(sizeTag = "mid", width = 900, height = 800)
+    }
 
     @Test
     fun narrowSurfacesRenderWithoutOverflow() = captureSurfaces(sizeTag = "narrow", width = 640, height = 800)

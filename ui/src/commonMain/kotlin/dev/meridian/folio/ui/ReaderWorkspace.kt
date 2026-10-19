@@ -520,7 +520,9 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                     .clip(stripShape)
                     .background(palette.surfaceSecondary)
                     .clayPressed(stripShape)
-                    .padding(horizontal = ClaySpacing.sm, vertical = ClaySpacing.xs)
+                    // `clayPressed` paints its inset band 4..12dp inside the edge; padding the
+                    // chips/`Ir al capítulo` label by `sm` keeps them clear of it.
+                    .padding(horizontal = ClaySpacing.sm, vertical = ClaySpacing.sm)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,

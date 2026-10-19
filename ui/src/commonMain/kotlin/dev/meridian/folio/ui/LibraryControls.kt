@@ -192,9 +192,11 @@ private fun LibraryHeader(
 @Composable
 private fun LibraryCountCapsule(palette: ClayPalette, visible: Int, total: Int) {
     val shape = RoundedCornerShape(percent = 50)
-    // A filled capsule with a hairline edge (same recipe as the notebook counter): the shared
-    // `clayPressed` inset bands are sized for large cards and, at 16.dp blur, would paint an
-    // 8.dp band over the top/bottom of this short pill and hide the tally text.
+    // A filled capsule with a hairline edge. It shares the notebook counter's *shape* (rounded
+    // pill + hairline border), but not its recipe: this one is filled with `surfaceSecondary` and
+    // outlined in `primary`, whereas the notebook counter is filled with `primaryContainer`. It
+    // skips `clayPressed` because its inset bands are sized for large cards and, at 16.dp blur,
+    // would paint an 8.dp band over the top/bottom of this short pill and hide the tally text.
     Box(
         Modifier
             .clip(shape)
