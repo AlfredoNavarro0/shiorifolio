@@ -82,7 +82,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 // =========================================================================================
-// 1. STITCH DESKTOP TOP NAVIGATION BAR ("Serene Vintage Reader — Lector Inmersivo Escritorio")
+// 1. STITCH DESKTOP TOP NAVIGATION BAR ("Claymorphic App Redesign — 01 Reader desktop")
 // =========================================================================================
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

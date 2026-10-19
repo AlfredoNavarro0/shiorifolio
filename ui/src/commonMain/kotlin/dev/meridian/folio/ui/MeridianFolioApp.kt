@@ -709,7 +709,7 @@ fun MeridianFolioApp(
                     )
                 } else {
                     // =========================================================================
-                    // STITCH DESKTOP DESIGN: "Lector Inmersivo Escritorio (Serene Vintage Reader)"
+                    // STITCH DESKTOP DESIGN: "Claymorphic App Redesign — Reader desktop"
                     // =========================================================================
                     Column(modifier = Modifier.fillMaxSize()) {
                         // 1. TOP STITCH HEADER BAR (Hidden when Zen Mode hides controls)
