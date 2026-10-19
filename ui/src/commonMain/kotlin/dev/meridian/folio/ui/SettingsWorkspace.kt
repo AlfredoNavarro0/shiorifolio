@@ -417,15 +417,19 @@ internal fun SettingsAndShortcutsWorkspaceView(
                         style = LocalClayTypography.current.bodySm,
                     )
                     if (dataStatusMessage != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(ClayRadius.sm))
-                                .background(palette.surfaceContainerHigh)
-                                .padding(ClaySpacing.sm)
-                                .testTag("data_status_message"),
-                        ) {
-                            Text(dataStatusMessage, color = palette.onSurface, style = LocalClayTypography.current.bodySm)
+                        // Clay snackbar: frosted card surface in a sibling layer (`clayFrosted`
+                        // blurs its own content, so the message must not live inside it).
+                        val statusShape = RoundedCornerShape(ClayRadius.md)
+                        Box(modifier = Modifier.fillMaxWidth().testTag("data_status_message")) {
+                            Box(Modifier.matchParentSize().clayFrosted(statusShape, surface = palette.cardSurface))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, palette.outlineVariant.copy(alpha = 0.7f), statusShape)
+                                    .padding(ClaySpacing.sm),
+                            ) {
+                                Text(dataStatusMessage, color = palette.onSurface, style = LocalClayTypography.current.bodySm)
+                            }
                         }
                     }
                 }

@@ -761,28 +761,40 @@ fun MeridianFolioApp(
                             )
                         }
 
-                        // Optional status feedback banner
+                        // Optional status feedback snackbar: frosted clay pill + clay type, with the
+                        // same message/close behaviour (no new tags, no new state).
                         if (statusBannerMessage != null && !isZenControlsHidden) {
-                            Row(
+                            val statusShape = RoundedCornerShape(percent = 50)
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(palette.surfaceContainerHigh)
-                                    .padding(horizontal = 24.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    .padding(horizontal = ClaySpacing.gutterDesktop, vertical = ClaySpacing.xs),
                             ) {
-                                Text(
-                                    text = statusBannerMessage ?: "",
-                                    color = palette.onSurface,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Text(
-                                    text = "Cerrar",
-                                    color = palette.textMuted,
-                                    fontSize = 11.5.sp,
-                                    modifier = Modifier.clickable { statusBannerMessage = null },
-                                )
+                                // matchParentSize layer: `clayFrosted` blurs its own content, so the
+                                // message lives in the sibling above instead of inside the blur.
+                                Box(Modifier.matchParentSize().clayFrosted(statusShape, surface = palette.cardSurface))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, palette.outlineVariant.copy(alpha = 0.7f), statusShape)
+                                        .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.xs),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = statusBannerMessage ?: "",
+                                        color = palette.onSurface,
+                                        style = LocalClayTypography.current.bodyMd,
+                                    )
+                                    Text(
+                                        text = "Cerrar",
+                                        color = palette.textMuted,
+                                        style = LocalClayTypography.current.labelMd,
+                                        modifier = Modifier
+                                            .clayFocusableClickable(palette, statusShape) { statusBannerMessage = null }
+                                            .padding(horizontal = ClaySpacing.xs, vertical = 4.dp),
+                                    )
+                                }
                             }
                         }
 
@@ -1524,20 +1536,31 @@ private fun StitchMobileKindleReaderLayout(
                             }
                         }
 
-                        // Optional status message or active reminder strip inside Mobile HUD
+                        // Optional status snackbar inside the Mobile HUD: frosted clay pill, same
+                        // message/close wiring (the HUD layout itself is untouched).
                         if (statusBannerMessage != null) {
                             Spacer(modifier = Modifier.height(4.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(palette.surfaceContainerHigh)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(statusBannerMessage, color = palette.onSurface, fontSize = 11.sp)
-                                Text("✕", color = palette.textMuted, fontSize = 11.sp, modifier = Modifier.clickable { onDismissStatus() })
+                            val statusShape = RoundedCornerShape(percent = 50)
+                            Box(Modifier.fillMaxWidth()) {
+                                Box(Modifier.matchParentSize().clayFrosted(statusShape, surface = palette.cardSurface))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, palette.outlineVariant.copy(alpha = 0.7f), statusShape)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(statusBannerMessage, color = palette.onSurface, style = LocalClayTypography.current.bodySm)
+                                    Text(
+                                        "✕",
+                                        color = palette.textMuted,
+                                        style = LocalClayTypography.current.labelMd,
+                                        modifier = Modifier
+                                            .clayFocusableClickable(palette, statusShape) { onDismissStatus() }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                         }
 

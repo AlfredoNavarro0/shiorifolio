@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -211,10 +212,14 @@ internal fun LibraryWorkspace(
         )
     }
     reloadBook?.let { book ->
+        // Secondary-flow restyle (Task 10): clay dialog chrome, buttons already come from
+        // `LibraryAction` (ClayPrimaryButton/ClaySecondaryButton). Tags and handlers untouched.
         AlertDialog(
             onDismissRequest = { reloadBook = null },
-            title = { Text("Recargar ${book.title}") },
-            text = { Text("Se sustituirán las modificaciones del contenido por el archivo vinculado. Se conservarán el progreso, las colecciones y las anotaciones.") },
+            shape = RoundedCornerShape(ClayRadius.md),
+            containerColor = palette.surfaceContainerLow,
+            title = { Text("Recargar ${book.title}", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
+            text = { Text("Se sustituirán las modificaciones del contenido por el archivo vinculado. Se conservarán el progreso, las colecciones y las anotaciones.", color = palette.onSurfaceVariant) },
             dismissButton = { LibraryAction("Cancelar", "library_cancel_reload") { reloadBook = null } },
             confirmButton = { LibraryAction("Recargar contenido", "library_confirm_reload") {
                 reloadBook = null
@@ -238,16 +243,18 @@ internal fun LibraryWorkspace(
         var deleteFiles by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { if (!busy) showDelete = false },
-            title = { Text("Eliminar ${selected.size} libros") },
+            shape = RoundedCornerShape(ClayRadius.md),
+            containerColor = palette.surfaceContainerLow,
+            title = { Text("Eliminar ${selected.size} libros", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
             text = {
                 Column(Modifier.heightIn(max = 350.dp).verticalScroll(rememberScrollState())) {
-                    Text("Se quitarán el progreso, las notas y los recordatorios de los libros seleccionados.")
+                    Text("Se quitarán el progreso, las notas y los recordatorios de los libros seleccionados.", color = palette.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(deleteFiles, { deleteFiles = it }, enabled = !busy, modifier = Modifier.testTag("library_delete_files"))
-                        Text("Eliminar también los archivos del dispositivo")
+                        Text("Eliminar también los archivos del dispositivo", color = palette.onSurfaceVariant)
                     }
-                    if (!deleteFiles) Text("Quitar de la biblioteca y conservar los archivos en el dispositivo.")
-                    else Text("Esta acción elimina permanentemente todas las copias vinculadas:")
+                    if (!deleteFiles) Text("Quitar de la biblioteca y conservar los archivos en el dispositivo.", color = palette.onSurfaceVariant)
+                    else Text("Esta acción elimina permanentemente todas las copias vinculadas:", color = palette.onSurfaceVariant)
                     if (deleteFiles) state.documents.filter { it.id in selected }.forEach { book ->
                         Text((book.sources.map { it.path } + listOfNotNull(book.filePath)).distinct().joinToString("\n"), fontSize = 12.sp)
                     }

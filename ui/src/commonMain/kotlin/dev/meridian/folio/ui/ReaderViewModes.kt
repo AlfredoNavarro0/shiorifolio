@@ -77,6 +77,10 @@ internal fun computeScaledMaxSpreadWidth(
 
 /**
  * Compact Fit-to-Page, Fit-to-Width, and Manual Zoom control strip (Iteración 4 · Punto 4).
+ *
+ * Clay restyle (tokens/shape only): the strip is a sunken `surfaceSecondary` pill well
+ * (`ClayRadius.sm`) holding fully-rounded item pills (`primary` when selected, transparent
+ * otherwise). Sizes, texts, handlers and test tags are unchanged.
  */
 @Composable
 internal fun ZoomAndFitControlStrip(
@@ -87,22 +91,24 @@ internal fun ZoomAndFitControlStrip(
     onChangeZoomScale: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val wellShape = RoundedCornerShape(ClayRadius.sm)
+    val itemShape = RoundedCornerShape(percent = 50)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(palette.surfaceContainerHigh)
-            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+            .clip(wellShape)
+            .background(palette.surfaceSecondary)
+            .border(1.dp, palette.outlineVariant, wellShape)
             .padding(horizontal = 6.dp, vertical = 3.dp)
             .testTag("zoom_fit_control_strip"),
     ) {
         val fitPageSelected = fitMode == PageFitMode.FIT_PAGE
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(5.dp))
+                .clip(itemShape)
                 .background(if (fitPageSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
-                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clayFocusableClickable(palette, itemShape) {
                     onSelectFitMode(PageFitMode.FIT_PAGE)
                 }
                 .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -111,7 +117,7 @@ internal fun ZoomAndFitControlStrip(
             Text(
                 text = "Ajustar Pág.",
                 color = if (fitPageSelected) palette.onPrimary else palette.onSurfaceVariant,
-                fontSize = 10.sp,
+                style = LocalClayTypography.current.labelSm,
                 fontWeight = if (fitPageSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
         }
@@ -119,9 +125,9 @@ internal fun ZoomAndFitControlStrip(
         val fitWidthSelected = fitMode == PageFitMode.FIT_WIDTH
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(5.dp))
+                .clip(itemShape)
                 .background(if (fitWidthSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
-                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clayFocusableClickable(palette, itemShape) {
                     onSelectFitMode(PageFitMode.FIT_WIDTH)
                 }
                 .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -130,17 +136,17 @@ internal fun ZoomAndFitControlStrip(
             Text(
                 text = "Ajustar Ancho",
                 color = if (fitWidthSelected) palette.onPrimary else palette.onSurfaceVariant,
-                fontSize = 10.sp,
+                style = LocalClayTypography.current.labelSm,
                 fontWeight = if (fitWidthSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
         }
 
-        Text("|", color = palette.outlineVariant, fontSize = 10.sp)
+        Text("|", color = palette.outlineVariant, style = LocalClayTypography.current.labelSm)
 
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(5.dp))
-                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clip(itemShape)
+                .clayFocusableClickable(palette, itemShape) {
                     onChangeZoomScale((zoomScale - 0.10f).coerceIn(0.50f, 2.50f))
                 }
                 .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -163,8 +169,8 @@ internal fun ZoomAndFitControlStrip(
 
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(5.dp))
-                .clayFocusableClickable(palette, RoundedCornerShape(5.dp)) {
+                .clip(itemShape)
+                .clayFocusableClickable(palette, itemShape) {
                     onChangeZoomScale((zoomScale + 0.10f).coerceIn(0.50f, 2.50f))
                 }
                 .padding(horizontal = 5.dp, vertical = 2.dp)

@@ -12,15 +12,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +43,12 @@ import dev.meridian.folio.ui.theme.*
  * Non-destructive editing dialogs: search/replace, page correction, chapter
  * management, metadata/cover editing and annotation re-anchoring. All changes
  * live in the reader state and are materialized only on export.
+ *
+ * Restyle note (Task 10): the M3 `AlertDialog` window is kept (it owns the modal
+ * mechanics and the width constraints), but its chrome is clay — `ClayRadius.md`
+ * corners, the `surfaceContainerLow` well, clay type for the titles and the clay
+ * button kit (`ClayPrimaryButton`/`ClaySecondaryButton`/`ClayChromeAction`) for
+ * every action. Tags, texts and handlers are untouched.
  */
 
 @Composable
@@ -71,7 +75,9 @@ internal fun SearchReplaceDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("search_replace_dialog"),
-        title = { Text("Buscar y reemplazar") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Buscar y reemplazar", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
@@ -80,6 +86,7 @@ internal fun SearchReplaceDialog(
                     label = { Text("Buscar", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("search_query_input"),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -89,6 +96,7 @@ internal fun SearchReplaceDialog(
                     label = { Text("Reemplazar con", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("search_replace_input"),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -125,35 +133,34 @@ internal fun SearchReplaceDialog(
                             color = palette.onSurface,
                             fontSize = 12.sp,
                         )
-                        TextButton(
-                            onClick = {
-                                val replaced = repository.replaceTextAt(
-                                    liveBook.id, match.pageNumber, match.blockId, match.startIndex,
-                                    query, replacement, ignoreCase,
-                                )
-                                if (replaced) onStatus("Ocurrencia reemplazada en la pág. ${match.pageNumber}.")
-                            },
-                            modifier = Modifier.testTag("search_replace_single_$index"),
-                        ) { Text("Reemplazar esta", fontSize = 12.sp) }
+                        ClayChromeAction(
+                            "Reemplazar esta", palette, "search_replace_single_$index",
+                            description = "Reemplazar esta coincidencia",
+                        ) {
+                            val replaced = repository.replaceTextAt(
+                                liveBook.id, match.pageNumber, match.blockId, match.startIndex,
+                                query, replacement, ignoreCase,
+                            )
+                            if (replaced) onStatus("Ocurrencia reemplazada en la pág. ${match.pageNumber}.")
+                        }
                     }
                     HorizontalDivider(color = palette.outlineVariant)
                 }
             }
         },
         confirmButton = {
-            Button(
+            ClayPrimaryButton(
+                label = "Reemplazar todo",
                 onClick = {
                     val count = repository.replaceAllText(liveBook.id, query, replacement, scope, ignoreCase)
                     onStatus(if (count > 0) "$count reemplazo(s) aplicados." else "No había coincidencias que reemplazar.")
                 },
+                tag = "search_replace_all",
                 enabled = query.isNotBlank() && matches.isNotEmpty(),
-                modifier = Modifier.heightIn(min = 48.dp).testTag("search_replace_all"),
-            ) { Text("Reemplazar todo") }
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("search_close_btn")) {
-                Text("Cerrar")
-            }
+            ClaySecondaryButton(label = "Cerrar", onClick = onClose, tag = "search_close_btn")
         },
     )
 }
@@ -176,7 +183,9 @@ internal fun PageEditorDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("page_editor_dialog"),
-        title = { Text("Editar página ${page.pageNumber}") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Editar página ${page.pageNumber}", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                 Text("Los cambios se guardan en tu biblioteca; el archivo original no se modifica.", color = palette.onSurfaceVariant, fontSize = 12.sp)
@@ -187,6 +196,7 @@ internal fun PageEditorDialog(
                     label = { Text("Título del capítulo", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("page_editor_chapter_input"),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -202,6 +212,7 @@ internal fun PageEditorDialog(
                             },
                             maxLines = 6,
                             colors = textFieldColors,
+                            shape = RoundedCornerShape(ClayRadius.sm),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 56.dp)
@@ -214,19 +225,18 @@ internal fun PageEditorDialog(
             }
         },
         confirmButton = {
-            Button(
+            ClayPrimaryButton(
+                label = "Guardar página",
                 onClick = {
                     repository.updatePageContent(liveBook.id, page.pageNumber, chapterTitle, blocks)
                     onStatus("Página ${page.pageNumber} actualizada.")
                     onClose()
                 },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("page_editor_save_btn"),
-            ) { Text("Guardar página") }
+                tag = "page_editor_save_btn",
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("page_editor_cancel_btn")) {
-                Text("Cancelar")
-            }
+            ClaySecondaryButton(label = "Cancelar", onClick = onClose, tag = "page_editor_cancel_btn")
         },
     )
 }
@@ -249,7 +259,9 @@ internal fun ChapterManagerDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("chapter_manager_dialog"),
-        title = { Text("Capítulos (${toc.size})") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Capítulos (${toc.size})", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 Text("Renombra, reordena o reconstruye el índice a partir de los títulos del contenido.", color = palette.onSurfaceVariant, fontSize = 12.sp)
@@ -300,20 +312,21 @@ internal fun ChapterManagerDialog(
                                     onValueChange = { editText = it },
                                     singleLine = true,
                                     colors = textFieldColors,
+                                    shape = RoundedCornerShape(ClayRadius.sm),
                                     modifier = Modifier
                                         .weight(1f)
                                         .shioriTextFieldFocusGuard()
                                         .testTag("chapter_rename_input_${entry.startPage}"),
                                 )
-                                Button(
-                                    onClick = {
-                                        if (repository.renameChapter(liveBook.id, entry.startPage, editText)) {
-                                            onStatus("Capítulo renombrado.")
-                                        }
-                                        editingStartPage = null
-                                    },
-                                    modifier = Modifier.testTag("chapter_rename_save_${entry.startPage}"),
-                                ) { Text("Guardar", fontSize = 12.sp) }
+                                ClayChromeAction(
+                                    "Guardar", palette, "chapter_rename_save_${entry.startPage}",
+                                    description = "Guardar el nuevo nombre del capítulo",
+                                ) {
+                                    if (repository.renameChapter(liveBook.id, entry.startPage, editText)) {
+                                        onStatus("Capítulo renombrado.")
+                                    }
+                                    editingStartPage = null
+                                }
                             }
                         }
                     }
@@ -322,7 +335,8 @@ internal fun ChapterManagerDialog(
             }
         },
         confirmButton = {
-            Button(
+            ClayPrimaryButton(
+                label = "Reparar TOC",
                 onClick = {
                     if (repository.repairTableOfContents(liveBook.id)) {
                         onStatus("Índice reconstruido desde los títulos del contenido.")
@@ -330,13 +344,11 @@ internal fun ChapterManagerDialog(
                         onStatus("El índice ya está coherente; no hubo cambios.")
                     }
                 },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("chapter_repair_toc_btn"),
-            ) { Text("Reparar TOC") }
+                tag = "chapter_repair_toc_btn",
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("chapter_close_btn")) {
-                Text("Cerrar")
-            }
+            ClaySecondaryButton(label = "Cerrar", onClick = onClose, tag = "chapter_close_btn")
         },
     )
 }
@@ -366,7 +378,9 @@ internal fun BookMetadataDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("book_metadata_dialog"),
-        title = { Text("Editar metadatos") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Editar metadatos", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(
                 Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
@@ -378,6 +392,7 @@ internal fun BookMetadataDialog(
                     label = { Text("Título", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("metadata_title_input"),
                 )
                 OutlinedTextField(
@@ -386,6 +401,7 @@ internal fun BookMetadataDialog(
                     label = { Text("Autor", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("metadata_author_input"),
                 )
                 OutlinedTextField(
@@ -394,6 +410,7 @@ internal fun BookMetadataDialog(
                     label = { Text("Idioma (p. ej. es, en)", fontSize = 12.sp) },
                     singleLine = true,
                     colors = textFieldColors,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("metadata_language_input"),
                 )
                 Text("Portada", color = palette.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -425,15 +442,14 @@ internal fun BookMetadataDialog(
             }
         },
         confirmButton = {
-            Button(
+            ClayPrimaryButton(
+                label = "Guardar",
                 onClick = { onSave(title, author, language, coverPath); onClose() },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("metadata_save_btn"),
-            ) { Text("Guardar") }
+                tag = "metadata_save_btn",
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("metadata_cancel_btn")) {
-                Text("Cancelar")
-            }
+            ClaySecondaryButton(label = "Cancelar", onClick = onClose, tag = "metadata_cancel_btn")
         },
     )
 }
@@ -456,7 +472,9 @@ internal fun ReattachAnnotationDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("reattach_dialog"),
-        title = { Text("Reanclar anotación") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Reanclar anotación", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(Modifier.widthIn(min = 320.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 if (phrase == null) {
@@ -482,20 +500,20 @@ internal fun ReattachAnnotationDialog(
                                         "…${match.snippetBefore}[${match.matchedText}]${match.snippetAfter}…",
                                         color = palette.onSurface, fontSize = 12.sp,
                                     )
-                                    Button(
-                                        onClick = {
-                                            repository.reattachPhrase(
-                                                phraseId = phrase.id,
-                                                pageNumber = match.pageNumber,
-                                                chapterTitle = match.chapterTitle,
-                                                anchorPrefix = match.snippetBefore,
-                                                anchorSuffix = match.snippetAfter,
-                                            )
-                                            onStatus("Anotación reanclada en la pág. ${match.pageNumber}.")
-                                            onClose()
-                                        },
-                                        modifier = Modifier.heightIn(min = 48.dp).testTag("reattach_match_$index"),
-                                    ) { Text("Reanclar aquí", fontSize = 12.sp) }
+                                    ClayChromeAction(
+                                        "Reanclar aquí", palette, "reattach_match_$index",
+                                        description = "Reanclar la anotación en esta ocurrencia",
+                                    ) {
+                                        repository.reattachPhrase(
+                                            phraseId = phrase.id,
+                                            pageNumber = match.pageNumber,
+                                            chapterTitle = match.chapterTitle,
+                                            anchorPrefix = match.snippetBefore,
+                                            anchorSuffix = match.snippetAfter,
+                                        )
+                                        onStatus("Anotación reanclada en la pág. ${match.pageNumber}.")
+                                        onClose()
+                                    }
                                 }
                                 HorizontalDivider(color = palette.outlineVariant)
                             }
@@ -505,9 +523,7 @@ internal fun ReattachAnnotationDialog(
             }
         },
         confirmButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("reattach_cancel_btn")) {
-                Text("Cancelar")
-            }
+            ClaySecondaryButton(label = "Cancelar", onClick = onClose, tag = "reattach_cancel_btn")
         },
     )
 }
@@ -522,7 +538,9 @@ internal fun BackupImportConfirmDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("backup_import_confirm_dialog"),
-        title = { Text("Restaurar respaldo") },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text("Restaurar respaldo", color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("El respaldo contiene:", color = palette.onSurface, fontSize = 13.sp)
@@ -538,14 +556,10 @@ internal fun BackupImportConfirmDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp).testTag("backup_import_confirm")) {
-                Text("Restaurar")
-            }
+            ClayPrimaryButton(label = "Restaurar", onClick = onConfirm, tag = "backup_import_confirm")
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("backup_import_cancel")) {
-                Text("Cancelar")
-            }
+            ClaySecondaryButton(label = "Cancelar", onClick = onClose, tag = "backup_import_cancel")
         },
     )
 }
@@ -561,7 +575,9 @@ internal fun BackupPathDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("backup_path_dialog"),
-        title = { Text(title) },
+        shape = RoundedCornerShape(ClayRadius.md),
+        containerColor = palette.surfaceContainerLow,
+        title = { Text(title, color = palette.onSurface, style = LocalClayTypography.current.titleMd) },
         text = {
             Column {
                 Text(
@@ -574,21 +590,21 @@ internal fun BackupPathDialog(
                     onValueChange = { path = it },
                     singleLine = true,
                     colors = clayTextFieldColors(palette),
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     modifier = Modifier.fillMaxWidth().shioriTextFieldFocusGuard().testTag("backup_path_input"),
                 )
             }
         },
         confirmButton = {
-            Button(
+            ClayPrimaryButton(
+                label = "Continuar",
                 onClick = { onConfirm(path) },
+                tag = "backup_path_confirm",
                 enabled = path.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp).testTag("backup_path_confirm"),
-            ) { Text("Continuar") }
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp).testTag("backup_path_cancel")) {
-                Text("Cancelar")
-            }
+            ClaySecondaryButton(label = "Cancelar", onClick = onClose, tag = "backup_path_cancel")
         },
     )
 }

@@ -29,10 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -177,37 +174,42 @@ internal fun StitchDesktopTopNavigationBar(
                 if (onOpenFileDialog != null) ClayChromeAction("Abrir archivo", palette, "reader_open_file", onClick = onOpenFileDialog)
             }
         }
-        // Expandable Quick Typography & Screen Tone Strip (when "Aa" button clicked in header)
+        // Expandable Quick Typography & Screen Tone Strip (when "Aa" button clicked in header).
+        // Clay popover (Task 10): the former M3 `Surface` band is now a content-sized clay card
+        // inset with the desktop gutters; every control keeps its handler, label and tag.
         AnimatedVisibility(visible = showTypographyPopover) {
-            Surface(
-                color = palette.surfaceSecondary,
-                border = BorderStroke(1.dp, palette.outlineVariant),
-                modifier = Modifier.fillMaxWidth(),
+            ClayContentCard(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ClaySpacing.gutterDesktop, vertical = ClaySpacing.xs),
             ) {
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                        .padding(ClaySpacing.md),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    // 4 Screen Tone Presets
+                    // 4 Screen Tone Presets. A labeled clay pill per tone: `ClayChip` cannot carry
+                    // the real tone swatch dot, so the pill is hand-rolled from the same tokens.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Tono de Papel:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Tono de Papel:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
                         ReaderTheme.entries.forEach { t ->
                             val sel = t == theme
+                            val toneShape = RoundedCornerShape(percent = 50)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (sel) palette.onSurface else palette.surfaceContainerLowest)
-                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
-                                    .clickable { onSelectTheme(t) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    .heightIn(min = 36.dp)
+                                    .clip(toneShape)
+                                    .background(if (sel) palette.onSurface else palette.surfaceSecondary)
+                                    .border(1.dp, palette.outlineVariant.copy(alpha = 0.6f), toneShape)
+                                    .clayFocusableClickable(palette, toneShape) { onSelectTheme(t) }
+                                    .padding(horizontal = ClaySpacing.sm),
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -219,63 +221,42 @@ internal fun StitchDesktopTopNavigationBar(
                                 Text(
                                     text = t.stitchLabel,
                                     color = if (sel) palette.canvas else palette.onSurface,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                                    style = LocalClayTypography.current.labelMd,
                                 )
                             }
                         }
                     }
 
-                    // Independent PDF Page Color Transformation Selector
+                    // Independent PDF Page Color Transformation Selector.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Color Pág. PDF:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Color Pág. PDF:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
                         PdfPageColorMode.entries.forEach { pdfMode ->
-                            val sel = pdfMode == pdfPageColorMode
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (sel) palette.primary else palette.surfaceContainerLowest)
-                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
-                                    .clickable { onSelectPdfColorMode(pdfMode) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    .testTag("pdf_color_mode_${pdfMode.name}"),
-                            ) {
-                                Text(
-                                    text = pdfMode.shortLabel,
-                                    color = if (sel) palette.onPrimary else palette.onSurface,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            }
+                            ClayChip(
+                                label = pdfMode.shortLabel,
+                                selected = pdfMode == pdfPageColorMode,
+                                onClick = { onSelectPdfColorMode(pdfMode) },
+                                tag = "pdf_color_mode_${pdfMode.name}",
+                                palette = palette,
+                            )
                         }
                     }
 
-                    // View Mode Pills (also accessible when in Editor/Archive/Notebook)
+                    // View Mode Pills (also accessible when in Editor/Archive/Notebook).
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text("Vista:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Vista:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
                         PageViewMode.entries.forEach { m ->
-                            val sel = m == viewMode
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(if (sel) palette.primary else palette.surfaceContainerLowest)
-                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
-                                    .clickable { onSelectViewMode(m) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                Text(
-                                    text = m.stitchLabel,
-                                    color = if (sel) palette.onPrimary else palette.onSurface,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                )
-                            }
+                            ClayChip(
+                                label = m.stitchLabel,
+                                selected = m == viewMode,
+                                onClick = { onSelectViewMode(m) },
+                                palette = palette,
+                            )
                         }
                     }
 
@@ -288,88 +269,52 @@ internal fun StitchDesktopTopNavigationBar(
                             Text(
                                 text = "PDF en Vista Original (fiel a maquetación):",
                                 color = palette.textMuted,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                style = LocalClayTypography.current.labelSm,
                             )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(palette.primary)
-                                    .clickable {
-                                        onUpdateBookTypography { it.copy(pdfPreferReflowText = true) }
-                                    }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp),
-                            ) {
-                                Text(
-                                    text = "Activar Texto Adaptable (Reflujo)",
-                                    color = palette.onPrimary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
+                            ClayChip(
+                                label = "Activar Texto Adaptable (Reflujo)",
+                                selected = true,
+                                onClick = { onUpdateBookTypography { it.copy(pdfPreferReflowText = true) } },
+                                palette = palette,
+                            )
                         } else {
                             if (currentBook.format == DocumentFormat.PDF) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(5.dp))
-                                        .background(palette.surfaceContainerLowest)
-                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
-                                        .clickable {
-                                            onUpdateBookTypography { it.copy(pdfPreferReflowText = false) }
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                ) {
-                                    Text(
-                                        text = "Vista Original PDF",
-                                        color = palette.onSurface,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                }
+                                ClayChip(
+                                    label = "Vista Original PDF",
+                                    selected = false,
+                                    onClick = { onUpdateBookTypography { it.copy(pdfPreferReflowText = false) } },
+                                    palette = palette,
+                                )
                             }
-                            Text("Cuerpo:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(palette.surfaceContainerLowest)
-                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
-                                    .clickable { onFontSizeChange(fontSizePt - 1f) }
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Text("A-", color = palette.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text("${fontSizePt.toInt()}pt", color = palette.onSurface, fontFamily = FontFamily.Monospace, fontSize = 11.5.sp)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(palette.surfaceContainerLowest)
-                                    .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
-                                    .clickable { onFontSizeChange(fontSizePt + 1f) }
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Text("A+", color = palette.onSurface, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
+                            Text("Cuerpo:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
+                            ClayChip(
+                                label = "A-",
+                                selected = false,
+                                onClick = { onFontSizeChange(fontSizePt - 1f) },
+                                palette = palette,
+                            )
+                            Text(
+                                text = "${fontSizePt.toInt()}pt",
+                                color = palette.onSurface,
+                                fontFamily = FontFamily.Monospace,
+                                style = LocalClayTypography.current.labelMd,
+                            )
+                            ClayChip(
+                                label = "A+",
+                                selected = false,
+                                onClick = { onFontSizeChange(fontSizePt + 1f) },
+                                palette = palette,
+                            )
 
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Interlineado:", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Interlineado:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
                             listOf(1.5f, 1.8f, 2.1f).forEach { mult ->
-                                val sel = kotlin.math.abs(lineSpacingMultiplier - mult) < 0.1f
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (sel) palette.primary else palette.surfaceContainerLowest)
-                                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(4.dp))
-                                        .clickable { onLineSpacingChange(mult) }
-                                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                                ) {
-                                    Text(
-                                        text = "$mult",
-                                        color = if (sel) palette.onPrimary else palette.onSurface,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                                    )
-                                }
+                                ClayChip(
+                                    label = "$mult",
+                                    selected = kotlin.math.abs(lineSpacingMultiplier - mult) < 0.1f,
+                                    onClick = { onLineSpacingChange(mult) },
+                                    palette = palette,
+                                )
                             }
                         }
                     }
@@ -1641,12 +1586,15 @@ private fun StitchFloatingCommandDock(
                 verticalArrangement = Arrangement.Center,
             ) {
                 // View Mode Switcher (All 7 modes: Doble página, Simple, Págs. Vertical, Continuo, Texto Adaptable, Ancho, Stretch) — preserves testTag("view_mode_${mode.name}")
+                // Clay restyle: sunken `surfaceSecondary` pill well holding fully-rounded item pills.
+                val viewModeWellShape = RoundedCornerShape(ClayRadius.sm)
+                val viewModeItemShape = RoundedCornerShape(percent = 50)
                 FlowRow(
                     verticalArrangement = Arrangement.Center,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(palette.surfaceContainerHigh)
+                        .clip(viewModeWellShape)
+                        .background(palette.surfaceSecondary)
                         .padding(3.dp),
                 ) {
                     val orderedModes = listOf(
@@ -1662,9 +1610,9 @@ private fun StitchFloatingCommandDock(
                         val selected = mode == viewMode
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(7.dp))
+                                .clip(viewModeItemShape)
                                 .background(if (selected) palette.primary else Color.Transparent)
-                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(7.dp)) {
+                                .clayFocusableClickable(palette = palette, shape = viewModeItemShape) {
                                     onSelectViewMode(mode)
                                 }
                                 .padding(horizontal = 7.dp, vertical = 4.dp)
@@ -1673,7 +1621,7 @@ private fun StitchFloatingCommandDock(
                             Text(
                                 text = mode.stitchLabel,
                                 color = if (selected) palette.onPrimary else palette.onSurfaceVariant,
-                                fontSize = 11.sp,
+                                style = LocalClayTypography.current.labelSm,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                             )
                         }
@@ -1827,7 +1775,9 @@ internal fun PageReminderBanner(
     }
 
     val textFieldColors = clayTextFieldColors(palette)
-    val reminderShape = RoundedCornerShape(14.dp)
+    // Clay restyle: token radii (well/card `ClayRadius.base`, pills fully rounded).
+    val reminderShape = RoundedCornerShape(ClayRadius.base)
+    val reminderPillShape = RoundedCornerShape(percent = 50)
 
     // Clay restyle: the reminder banner is a frosted [ClayShadows.card] surface instead of an
     // M3 Surface. The card content sizes the outer Box and the shadow/frosted layers ride
@@ -1869,7 +1819,7 @@ internal fun PageReminderBanner(
                     ) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(reminderPillShape)
                                 .background(palette.warningAmber)
                                 .padding(horizontal = 7.dp, vertical = 2.dp),
                         ) {
@@ -1890,21 +1840,16 @@ internal fun PageReminderBanner(
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
+                        ClayPrimaryButton(
+                            label = "Continuar en Pág. ${reminder.pageNumber}",
                             onClick = { onJumpToReminder(reminder.pageNumber) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = palette.primary,
-                                contentColor = palette.onPrimary,
-                            ),
-                        ) {
-                            Text("Continuar en Pág. ${reminder.pageNumber}", fontSize = 11.sp)
-                        }
-                        OutlinedButton(
+                            palette = palette,
+                        )
+                        ClaySecondaryButton(
+                            label = "Editar",
                             onClick = onToggleEditor,
-                            border = BorderStroke(1.dp, palette.outlineVariant),
-                        ) {
-                            Text("Editar", color = palette.onSurface, fontSize = 11.sp)
-                        }
+                            palette = palette,
+                        )
                     }
                 }
             }
@@ -1923,9 +1868,9 @@ internal fun PageReminderBanner(
                     )
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(reminderPillShape)
                             .background(palette.surfaceContainerHigh)
-                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(6.dp))
+                            .border(1.dp, palette.outlineVariant, reminderPillShape)
                             .clickable { cancelAndDiscardChanges() }
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
@@ -1948,6 +1893,7 @@ internal fun PageReminderBanner(
                         onValueChange = { pageInput = it.filter { ch -> ch.isDigit() } },
                         label = { Text("Pág. # (1-${currentBook.totalPages})", fontSize = 11.sp) },
                         singleLine = true,
+                        shape = RoundedCornerShape(ClayRadius.sm),
                         colors = textFieldColors,
                         modifier = Modifier
                             .width(120.dp)
@@ -1958,6 +1904,7 @@ internal fun PageReminderBanner(
                         onValueChange = { targetLabelInput = it },
                         label = { Text("Cuándo (ej. Esta noche)", fontSize = 11.sp) },
                         singleLine = true,
+                        shape = RoundedCornerShape(ClayRadius.sm),
                         colors = textFieldColors,
                         modifier = Modifier
                             .width(180.dp)
@@ -1968,37 +1915,32 @@ internal fun PageReminderBanner(
                         onValueChange = { noteInput = it },
                         label = { Text("Nota de lectura", fontSize = 11.sp) },
                         singleLine = true,
+                        shape = RoundedCornerShape(ClayRadius.sm),
                         colors = textFieldColors,
                         modifier = Modifier
                             .weight(1f)
                             .shioriTextFieldFocusGuard(),
                     )
-                    Button(
+                    ClayPrimaryButton(
+                        label = "Guardar",
                         onClick = {
                             val parsedPage = pageInput.toIntOrNull() ?: currentBook.currentPage
                             onSaveReminder(parsedPage, noteInput, targetLabelInput)
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = palette.primary,
-                            contentColor = palette.onPrimary,
-                        ),
-                    ) {
-                        Text("Guardar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    OutlinedButton(
+                        palette = palette,
+                    )
+                    ClaySecondaryButton(
+                        label = "Cancelar",
                         onClick = cancelAndDiscardChanges,
-                        border = BorderStroke(1.dp, palette.outlineVariant),
-                        modifier = Modifier.testTag("close_reminder_editor_btn"),
-                    ) {
-                        Text("Cancelar", color = palette.onSurface, fontSize = 12.sp)
-                    }
+                        tag = "close_reminder_editor_btn",
+                        palette = palette,
+                    )
                     if (reminder != null) {
-                        OutlinedButton(
+                        ClaySecondaryButton(
+                            label = "Borrar",
                             onClick = onClearReminder,
-                            border = BorderStroke(1.dp, palette.outlineVariant),
-                        ) {
-                            Text("Borrar", color = palette.onSurfaceVariant, fontSize = 12.sp)
-                        }
+                            palette = palette,
+                        )
                     }
                 }
             }
@@ -2020,7 +1962,7 @@ internal fun QuickMarkPhraseBar(
     onClose: () -> Unit,
 ) {
     val textFieldColors = clayTextFieldColors(palette)
-    val barShape = RoundedCornerShape(8.dp)
+    val barShape = RoundedCornerShape(ClayRadius.sm)
 
     // Clay restyle: frosted clay card with a `primary` outline marking the active editor,
     // replacing the former M3 Surface (same tags/behavior, clay look).
@@ -2081,6 +2023,7 @@ internal fun QuickMarkPhraseBar(
                     onValueChange = onPhraseChange,
                     label = { Text("Palabra o frase para subrayar y guardar", fontSize = 11.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     colors = textFieldColors,
                     modifier = Modifier
                         .weight(1f)
@@ -2091,26 +2034,22 @@ internal fun QuickMarkPhraseBar(
                     onValueChange = onNoteChange,
                     label = { Text("Nota / Definición", fontSize = 11.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(ClayRadius.sm),
                     colors = textFieldColors,
                     modifier = Modifier
                         .weight(1f)
                         .shioriTextFieldFocusGuard(),
                 )
-                Button(
+                ClayPrimaryButton(
+                    label = "Guardar Frase",
                     onClick = onSave,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.primary,
-                        contentColor = palette.onPrimary,
-                    ),
-                ) {
-                    Text("Guardar Frase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-                OutlinedButton(
+                    palette = palette,
+                )
+                ClaySecondaryButton(
+                    label = "Cancelar",
                     onClick = onClose,
-                    border = BorderStroke(1.dp, palette.outlineVariant),
-                ) {
-                    Text("Cancelar", color = palette.onSurface, fontSize = 12.sp)
-                }
+                    palette = palette,
+                )
             }
         }
     }
