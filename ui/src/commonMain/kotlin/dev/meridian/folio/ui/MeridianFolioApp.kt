@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -148,6 +147,7 @@ fun MeridianFolioApp(
     onPickBackupFileToImport: ((onPathSelected: (String) -> Unit) -> Unit)? = null,
     onPickBackupFileToExport: ((defaultFileName: String, onPathSelected: (String) -> Unit) -> Unit)? = null,
     onPickImageFile: ((onPathSelected: (String) -> Unit) -> Unit)? = null,
+    initialSection: MeridianSection = MeridianSection.LIBRARY,
 ) {
     val state by repository.state.collectAsState()
     val editHistoryState by repository.editHistoryState.collectAsState()
@@ -155,11 +155,10 @@ fun MeridianFolioApp(
     LibraryFolderEffects(repository)
     val uiAppearance = state.uiAppearance
     val bookTypography = state.bookTypography
-    // The clay chrome is always the light lavender canvas; only the reading sheet follows state.theme.
-    val palette = ClayTokens.chrome(uiAppearance.highContrastText)
+    val palette = ClayTokens.chrome(uiAppearance.highContrastText, state.theme)
     val currentBook = state.documents.find { it.id == state.selectedBookId } ?: state.documents.firstOrNull()
 
-    var activeSection by remember { mutableStateOf(MeridianSection.READER) }
+    var activeSection by remember { mutableStateOf(initialSection) }
     var isTimerRunning by remember { mutableStateOf(true) }
     var showReminderEditor by remember { mutableStateOf(false) }
     var quickMarkPhrase by remember { mutableStateOf("") }
@@ -210,6 +209,21 @@ fun MeridianFolioApp(
     CompositionLocalProvider(
         LocalDensity provides scaledDensity,
         LocalReaderPagination provides readerPagination,
+        LocalSaveReaderSelection provides { selected ->
+            currentBook?.let { book ->
+                val saved = repository.saveWordOrPhrase(book.id, selected.page, selected.text, selected.context,
+                    tone = quickMarkTone)
+                if (saved != null) statusBannerMessage = "Guardado en Notebook (pág. ${saved.pageNumber})."
+            }
+        },
+        LocalPdfViewport provides PdfViewport(state.fitMode, state.zoomScale),
+        LocalReaderPageTurn provides { direction ->
+            currentBook?.let { book ->
+                readerPagination.turn(book, if (state.viewMode == PageViewMode.TWO_COLUMNS) 2 else 1, direction) {
+                    repository.goToPage(book.id, it)
+                }
+            }
+        },
         LocalTextFieldFocusTracker provides { gained ->
             focusedTextFieldCount = (focusedTextFieldCount + if (gained) 1 else -1).coerceAtLeast(0)
         },
@@ -420,13 +434,13 @@ fun MeridianFolioApp(
 
                         // 3. Tab switching (Ctrl + Tab / Ctrl + Shift + Tab)
                         if (event.matches(bindingFor(ReaderAction.PREV_TAB))) {
-                            val sections = MeridianSection.entries
+                            val sections = MainNavigationSections
                             val idx = sections.indexOf(activeSection).coerceAtLeast(0)
                             activeSection = sections[(idx - 1 + sections.size) % sections.size]
                             return@onPreviewKeyEvent true
                         }
                         if (event.matches(bindingFor(ReaderAction.NEXT_TAB))) {
-                            val sections = MeridianSection.entries
+                            val sections = MainNavigationSections
                             val idx = sections.indexOf(activeSection).coerceAtLeast(0)
                             activeSection = sections[(idx + 1) % sections.size]
                             return@onPreviewKeyEvent true
@@ -757,6 +771,18 @@ fun MeridianFolioApp(
                                 onRedoEdit = {
                                     if (repository.redoEdit(currentBook.id)) statusBannerMessage = "Cambio rehecho."
                                 },
+                                fitMode = state.fitMode,
+                                zoomScale = state.zoomScale,
+                                keyBindings = state.keyBindings,
+                                canNavigateBack = state.navigationBackStack.isNotEmpty(),
+                                canNavigateForward = state.navigationForwardStack.isNotEmpty(),
+                                phraseCount = bookSavedPhrases.size,
+                                onSelectFitMode = { repository.setPageFitMode(it) },
+                                onChangeZoomScale = { repository.setZoomScale(it) },
+                                onNavigateBack = handleNavigateBack,
+                                onNavigateForward = handleNavigateForward,
+                                onJumpToChapter = { page, title -> repository.jumpToLocation(currentBook.id, page, "Capítulo: $title") },
+                                onOpenNotebook = { activeSection = MeridianSection.LEXICON },
                             )
                         }
 
@@ -882,19 +908,9 @@ fun MeridianFolioApp(
                                     isTimerRunning = isTimerRunning,
                                     isZenControlsHidden = isZenControlsHidden,
                                     isFullscreen = effectiveFullscreen,
-                                    backHistoryTop = state.navigationBackStack.lastOrNull(),
-                                    forwardHistoryTop = state.navigationForwardStack.lastOrNull(),
                                     onPageChange = { targetPage -> repository.goToPage(currentBook.id, targetPage) },
-                                    onJumpToChapter = { targetPage, chapTitle ->
-                                        repository.jumpToLocation(currentBook.id, targetPage, "Capítulo: $chapTitle")
-                                    },
-                                    onNavigateBack = handleNavigateBack,
-                                    onNavigateForward = handleNavigateForward,
                                     onSelectViewMode = { repository.setViewMode(it) },
-                                    onSelectFitMode = { repository.setPageFitMode(it) },
-                                    onChangeZoomScale = { repository.setZoomScale(it) },
                                     onSelectTheme = { repository.setTheme(it) },
-                                    onSelectPdfColorMode = { repository.setPdfPageColorMode(it) },
                                     onFontSizeChange = { repository.setFontSizePt(it) },
                                     onLineSpacingChange = { repository.setLineSpacingMultiplier(it) },
                                     onUpdateBookTypography = { repository.updateBookTypography(it) },
@@ -935,7 +951,6 @@ fun MeridianFolioApp(
                                         )
                                         statusBannerMessage = "Página ${currentBook.currentPage} marcada con la cinta Shiori (栞)."
                                     },
-                                    onOpenNotebook = { activeSection = MeridianSection.LEXICON },
                                 )
 
                                 MeridianSection.LEXICON -> SavedPhrasesVaultView(
@@ -1002,8 +1017,8 @@ fun MeridianFolioApp(
                             }
                         }
 
-                        // 5. CLAY FOOTER (hidden with the rest of the chrome in Zen Mode)
-                        if (!isZenControlsHidden) {
+                        // The reader reserves the remaining height for the document.
+                        if (!isZenControlsHidden && activeSection != MeridianSection.READER) {
                             ClayFooter(state.documents.size)
                         }
                     }
@@ -1209,7 +1224,12 @@ private fun StitchMobileKindleReaderLayout(
             }
 
             else -> {
-                if (isSingleImagePage) {
+                if (book.hasOriginalPage(currentPageObj) && !bookTypography.pdfPreferReflowText) {
+                    OriginalPdfPage(book, currentPageObj, tone, pdfPageColorMode,
+                        Modifier.fillMaxSize().padding(top = if (hudVisible) 68.dp else 8.dp,
+                            bottom = if (hudVisible) 96.dp + ClayBottomNavHeight else 12.dp),
+                        onTurn = { pagination.turn(book, 1, it, onPageChange) })
+                } else if (isSingleImagePage) {
                     val bmp = rememberLoadedImageBitmap(
                         path = imageBlocks.first().imagePath,
                         bookFilePath = book.filePath,
@@ -2016,17 +2036,4 @@ internal fun buildHighlightedAnnotatedString(
             startIdx = lower.indexOf(target, startIdx + target.length)
         }
     }
-}
-
-internal fun extractCandidatePhrases(text: String): List<String> {
-    val words = text
-        .replace(Regex("[^A-Za-z0-9#\\-\\s]"), " ")
-        .trim()
-        .split(Regex("\\s+"))
-        .filter { it.length >= 4 }
-    if (words.size < 3) return emptyList()
-    val firstChunk = words.take(3).joinToString(" ")
-    val midStart = (words.size / 2).coerceAtLeast(1)
-    val secondChunk = words.drop(midStart).take(3).joinToString(" ")
-    return listOf(firstChunk, secondChunk).distinct().filter { it.length >= 8 }
 }

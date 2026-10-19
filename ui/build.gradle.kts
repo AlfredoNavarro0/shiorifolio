@@ -11,6 +11,7 @@ kotlin {
     jvmToolchain(25)
 
     android {
+        androidResources.enable = true
         namespace = "dev.meridian.folio.ui"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()

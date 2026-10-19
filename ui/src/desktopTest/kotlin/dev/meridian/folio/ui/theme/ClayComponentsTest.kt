@@ -2,10 +2,12 @@ package dev.meridian.folio.ui.theme
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import dev.meridian.folio.core.ReaderTheme
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,7 +22,7 @@ class ClayComponentsTest {
                 ClayPrimaryButton("Importar libro", onClick = { clicks++ }, tag = "library_import_btn")
             }
         }
-        onNodeWithTag("library_import_btn").assertExists()
+        onNodeWithTag("library_import_btn").assertExists().assertHeightIsAtLeast(48.dp)
         onNodeWithTag("library_import_btn").performClick()
         waitForIdle()
         assertEquals(1, clicks)

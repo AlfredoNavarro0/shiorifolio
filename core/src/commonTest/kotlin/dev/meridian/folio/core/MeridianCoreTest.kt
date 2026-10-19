@@ -205,5 +205,14 @@ class MeridianCoreTest {
         assertTrue(combinedText.contains("architectural span of the viaduct"))
         assertTrue(combinedText.contains("built in the autumn of 1894"))
         assertTrue(result.items.any { it.isSceneBreak || PdfReflowEngine.isSemanticSceneBreak(it.text) })
+
+        val pagedFlow = PdfReflowEngine.buildContinuousFlow(syntheticPdf, preservePageBoundaries = true)
+        assertEquals(0, pagedFlow.mergedPageBreakCount)
+        assertTrue(pagedFlow.items.any { it.sourcePageNumber == 1 && it.text.contains("built in") })
+        assertTrue(pagedFlow.items.any { it.sourcePageNumber == 2 && it.text.startsWith("the autumn") },
+            "Visible text retains its actual source page for the reader counter")
+        val secondPage = PdfReflowEngine.buildReflowForPage(syntheticPdf, syntheticPdf.pages[1])
+        assertTrue(secondPage.items.any { it.text.startsWith("the autumn") },
+            "Reflow must not move the beginning of page 2 into page 1")
     }
 }

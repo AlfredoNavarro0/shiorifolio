@@ -797,7 +797,12 @@ private fun AnchorStatusChip(status: AnchorStatus, palette: ClayPalette) {
     ) {
         Text(
             status.label,
-            color = if (orphaned) palette.onWarningAmber else palette.onSuccessMint,
+            color = when {
+                palette.isDarkReading && orphaned -> palette.warningAmber
+                palette.isDarkReading -> palette.successMint
+                orphaned -> palette.onWarningAmber
+                else -> palette.onSuccessMint
+            },
             style = LocalClayTypography.current.labelSm,
         )
     }

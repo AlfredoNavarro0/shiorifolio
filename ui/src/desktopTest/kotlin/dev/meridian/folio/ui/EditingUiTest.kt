@@ -30,10 +30,10 @@ class EditingUiTest {
     @Test
     fun searchReplaceDialogPreviewsReplacesAndUndoRestores() = runComposeUiTest {
         val repo = newRepo()
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         val book = repo.currentBook()!!
 
-        onNodeWithTag("reader_search_btn").performScrollTo().performClick()
+        readerMenuItem("reader_search_btn").performScrollTo().performClick()
         onNodeWithTag("search_replace_dialog").assertExists()
 
         onNodeWithTag("search_query_input").performTextReplacement("Viaduct")
@@ -51,7 +51,7 @@ class EditingUiTest {
         onNodeWithTag("search_close_btn").performClick()
         waitForIdle()
 
-        onNodeWithTag("reader_undo_btn").performScrollTo().performClick()
+        readerMenuItem("reader_undo_btn").performScrollTo().performClick()
         waitForIdle()
 
         val reverted = repo.state.value.documents.first { it.id == book.id }
@@ -59,7 +59,7 @@ class EditingUiTest {
         assertTrue(reverted.pages.any { page -> page.blocks.any { it.text.contains("Viaduct") } })
 
         // Redo returns the replacement in place.
-        onNodeWithTag("reader_redo_btn").performScrollTo().performClick()
+        readerMenuItem("reader_redo_btn").performScrollTo().performClick()
         waitForIdle()
         val redone = repo.state.value.documents.first { it.id == book.id }
         assertTrue(redone.pages.any { page -> page.blocks.any { it.text.contains("Bridge") } })
@@ -68,11 +68,11 @@ class EditingUiTest {
     @Test
     fun pageEditorSavesWordAndParagraphCorrections() = runComposeUiTest {
         val repo = newRepo()
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         val book = repo.currentBook()!!
         val pageNumber = book.currentPage
 
-        onNodeWithTag("open_page_editor_btn").performScrollTo().performClick()
+        readerMenuItem("open_page_editor_btn").performScrollTo().performClick()
         onNodeWithTag("page_editor_dialog").assertExists()
 
         onNodeWithTag("page_editor_block_1").performTextReplacement("Waybills revised by the reader.")
@@ -86,10 +86,10 @@ class EditingUiTest {
     @Test
     fun chapterManagerRenamesAndRepairsTableOfContents() = runComposeUiTest {
         val repo = newRepo()
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         val book = repo.currentBook()!!
 
-        onNodeWithTag("open_chapter_manager_btn").performScrollTo().performClick()
+        readerMenuItem("open_chapter_manager_btn").performScrollTo().performClick()
         onNodeWithTag("chapter_manager_dialog").assertExists()
 
         onNodeWithTag("chapter_rename_3").performScrollTo().performClick()
@@ -139,7 +139,7 @@ class EditingUiTest {
         val orphaned = repo.state.value.savedPhrases.first { it.id == phrase.id }
         assertEquals(AnchorStatus.ORPHANED, orphaned.anchorStatus)
 
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_LEXICON").performClick()
         waitForIdle()
 
@@ -177,7 +177,7 @@ class EditingUiTest {
             tone = HighlightTone.AMBER,
         )!!
 
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_LEXICON").performClick()
         waitForIdle()
 
@@ -238,7 +238,7 @@ class EditingUiTest {
 
             val backupFile = File(root, "respaldo.json")
 
-            setContent { MeridianFolioApp(repository = repo) }
+            setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
             onNodeWithTag("section_tab_SETTINGS").performClick()
             waitForIdle()
@@ -273,9 +273,9 @@ class EditingUiTest {
     @Test
     fun mobileHudOffersEditingTools() = runComposeUiTest {
         val repo = newRepo()
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
-        onNodeWithTag("mobile_preview_toggle").performScrollTo().performClick()
+        readerMenuItem("mobile_preview_toggle").performScrollTo().performClick()
         waitForIdle()
         onNodeWithTag("mobile_edit_menu_btn").performClick()
         onNodeWithTag("mobile_search_btn").performClick()

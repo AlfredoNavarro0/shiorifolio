@@ -68,12 +68,13 @@ import dev.meridian.folio.core.BookTypographySettings
 import dev.meridian.folio.core.DocumentFormat
 import dev.meridian.folio.core.FinishTimePrediction
 import dev.meridian.folio.core.HighlightTone
-import dev.meridian.folio.core.NavigationHistoryEntry
 import dev.meridian.folio.core.PageFitMode
 import dev.meridian.folio.core.PageReminder
 import dev.meridian.folio.core.PageViewMode
 import dev.meridian.folio.core.PdfPageColorMode
 import dev.meridian.folio.core.ReaderTheme
+import dev.meridian.folio.core.ReaderAction
+import dev.meridian.folio.core.KeyBindingSpec
 import dev.meridian.folio.core.SavedPhrase
 import dev.meridian.folio.core.UiAppearanceSettings
 import dev.meridian.folio.ui.theme.*
@@ -123,16 +124,22 @@ internal fun StitchDesktopTopNavigationBar(
     canRedoEdit: Boolean,
     onUndoEdit: () -> Unit,
     onRedoEdit: () -> Unit,
+    fitMode: PageFitMode,
+    zoomScale: Float,
+    keyBindings: Map<ReaderAction, KeyBindingSpec>,
+    canNavigateBack: Boolean,
+    canNavigateForward: Boolean,
+    phraseCount: Int,
+    onSelectFitMode: (PageFitMode) -> Unit,
+    onChangeZoomScale: (Float) -> Unit,
+    onNavigateBack: () -> Unit,
+    onNavigateForward: () -> Unit,
+    onJumpToChapter: (Int, String) -> Unit,
+    onOpenNotebook: () -> Unit,
 ) {
     var showTypographyPopover by remember { mutableStateOf(false) }
     val uiFontFamily = uiAppearance.fontFamily.toComposeFontFamily()
     val isPdfOriginalMode = currentBook.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
-    // Real chapter position of the current page (1-based index into the book TOC); 0 when the
-    // book has no chapter metadata, in which case the strip omits the chapter badge.
-    val chapterNumber = remember(currentBook.id, currentBook.pages, currentBook.currentPage) {
-        val entries = currentBook.tableOfContents
-        entries.indexOfLast { it.startPage <= currentBook.currentPage } + 1
-    }
 
     Column(
         modifier = Modifier
@@ -145,36 +152,42 @@ internal fun StitchDesktopTopNavigationBar(
             ClayTopNav(activeSection, onSelectSection, theme, onToggleTheme)
         }
         if (activeSection == MeridianSection.READER) {
-            // 1A. BOOK STRIP (Stitch ribbon): back to library, real format, title and chapter.
-            ReaderBookStrip(
-                palette = palette,
-                book = currentBook,
-                chapterNumber = chapterNumber,
-                onBackToLibrary = { onSelectSection(MeridianSection.LIBRARY) },
-            )
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ClayChromeAction("Aa  Apariencia", palette, "top_typography_popover_btn", showTypographyPopover) {
-                    showTypographyPopover = !showTypographyPopover
+            fun shortcut(action: ReaderAction) = (keyBindings[action] ?: action.defaultSpec).displayLabel()
+            val items = buildList {
+                add(ReaderHeaderMenuItem("Buscar y reemplazar", "reader_search_btn", shortcut(ReaderAction.FIND_IN_BOOK), onClick = onOpenSearch))
+                add(ReaderHeaderMenuItem("Editar página", "open_page_editor_btn", onClick = onOpenPageEditor))
+                add(ReaderHeaderMenuItem("Organizar capítulos", "open_chapter_manager_btn", onClick = onOpenChapterManager))
+                add(ReaderHeaderMenuItem("Metadatos del libro", "open_metadata_btn", onClick = onOpenMetadataEditor))
+                add(ReaderHeaderMenuItem("Deshacer edición", "reader_undo_btn", shortcut(ReaderAction.UNDO_EDIT), canUndoEdit, onUndoEdit))
+                add(ReaderHeaderMenuItem("Rehacer edición", "reader_redo_btn", shortcut(ReaderAction.REDO_EDIT), canRedoEdit, onRedoEdit))
+                add(ReaderHeaderMenuItem("Volver en el historial", "nav_history_back_btn", shortcut(ReaderAction.NAV_BACK), canNavigateBack, onNavigateBack))
+                add(ReaderHeaderMenuItem("Avanzar en el historial", "nav_history_forward_btn", shortcut(ReaderAction.NAV_FORWARD), canNavigateForward, onNavigateForward))
+                add(ReaderHeaderMenuItem("Modo enfoque", "zen_mode_toggle_btn", shortcut(ReaderAction.TOGGLE_ZEN_MODE), onClick = onToggleZenControls))
+                add(ReaderHeaderMenuItem("Cambiar modo de vista", "reader_cycle_view", shortcut(ReaderAction.CYCLE_VIEW_MODE), onClick = {
+                    onSelectViewMode(PageViewMode.entries[(viewMode.ordinal + 1) % PageViewMode.entries.size])
+                }))
+                add(ReaderHeaderMenuItem("Cuaderno · $phraseCount anotaciones", "reader_notebook", onClick = onOpenNotebook))
+                add(ReaderHeaderMenuItem("Vista móvil", "mobile_preview_toggle", onClick = onToggleMobilePreview))
+                if (onOpenFileDialog != null) add(ReaderHeaderMenuItem("Abrir archivo", "reader_open_file", onClick = onOpenFileDialog))
+                if (currentBook.format == DocumentFormat.PDF) {
+                    PdfPageColorMode.entries.forEach { mode ->
+                        add(ReaderHeaderMenuItem("Color PDF · ${mode.shortLabel}", "reader_pdf_color_${mode.name}",
+                            onClick = { onSelectPdfColorMode(mode) }))
+                    }
                 }
-                ClayChromeAction("Marcapáginas", palette, "open_reminder_btn", activeReminder != null, onClick = onToggleReminderEditor)
-                ClayChromeAction("+ Frase", palette, "open_mark_phrase_btn", onClick = onToggleQuickMark)
-                ClayChromeAction("Buscar", palette, "reader_search_btn", description = "Buscar y reemplazar en el libro", onClick = onOpenSearch)
-                ClayChromeAction("Editar página", palette, "open_page_editor_btn", description = "Corregir palabras y párrafos de la página actual", onClick = onOpenPageEditor)
-                ClayChromeAction("Capítulos", palette, "open_chapter_manager_btn", description = "Renombrar, reordenar y reparar capítulos", onClick = onOpenChapterManager)
-                ClayChromeAction("Metadatos", palette, "open_metadata_btn", description = "Editar título, autor, idioma y portada", onClick = onOpenMetadataEditor)
-                ClayChromeAction("Deshacer", palette, "reader_undo_btn", enabled = canUndoEdit, description = "Deshacer el último cambio", onClick = onUndoEdit)
-                ClayChromeAction("Rehacer", palette, "reader_redo_btn", enabled = canRedoEdit, description = "Rehacer el último cambio deshecho", onClick = onRedoEdit)
-                ClayChromeAction("Enfoque", palette, "zen_mode_toggle_btn", onClick = onToggleZenControls)
-                ClayChromeAction("⛶  Pantalla completa", palette, "fullscreen_toggle_btn", isFullscreen, onClick = onToggleFullscreen)
-                ClayChromeAction("Vista móvil", palette, "mobile_preview_toggle", isMobileOverride, onClick = onToggleMobilePreview)
-                if (onOpenFileDialog != null) ClayChromeAction("Abrir archivo", palette, "reader_open_file", onClick = onOpenFileDialog)
             }
+            ReaderHeaderBar(
+                palette, currentBook, showTypographyPopover, activeReminder != null, isFullscreen,
+                fitMode, zoomScale, { onSelectSection(MeridianSection.LIBRARY) },
+                { showTypographyPopover = !showTypographyPopover }, onToggleReminderEditor,
+                onToggleQuickMark, onToggleFullscreen, onSelectFitMode, onChangeZoomScale,
+                onJumpToChapter, items,
+            )
         }
         // Expandable Quick Typography & Screen Tone Strip (when "Aa" button clicked in header).
         // Clay popover (Task 10): the former M3 `Surface` band is now a content-sized clay card
         // inset with the desktop gutters; every control keeps its handler, label and tag.
-        AnimatedVisibility(visible = showTypographyPopover) {
+        AnimatedVisibility(visible = showTypographyPopover && activeSection == MeridianSection.READER) {
             ClayContentCard(
                 Modifier
                     .fillMaxWidth()
@@ -193,7 +206,7 @@ internal fun StitchDesktopTopNavigationBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Tono de Papel:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
+                        Text("Tema:", color = palette.textMuted, style = LocalClayTypography.current.labelSm)
                         ReaderTheme.entries.forEach { t ->
                             val sel = t == theme
                             val toneShape = RoundedCornerShape(percent = 50)
@@ -325,119 +338,6 @@ internal fun StitchDesktopTopNavigationBar(
     }
 }
 
-/**
- * Book strip of the desktop reader: the Stitch "top reader ribbon". A frosted clay card that
- * carries a circular back-to-library button, the real document format breadcrumb, the book
- * title and the current chapter badge (`Cap. N`, derived from the TOC). The tool row below
- * stays a separate scrollable row so every chrome action keeps its reachability.
- */
-@Composable
-private fun ReaderBookStrip(
-    palette: ClayPalette,
-    book: BookDocument,
-    chapterNumber: Int,
-    onBackToLibrary: () -> Unit,
-) {
-    val shape = RoundedCornerShape(ClayRadius.lg)
-    val pillShape = RoundedCornerShape(percent = 50)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = ClaySpacing.gutterDesktop, vertical = ClaySpacing.xs),
-    ) {
-        ClayShadowBox(
-            shadow = ClayShadows.card,
-            shape = shape,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .testTag("reader_book_strip"),
-        ) {
-            Box(Modifier.matchParentSize().clayFrosted(shape, surface = palette.cardSurface))
-            // Centring the row vertically removes the dead space left by the 64.dp minimum
-            // height when the content is shorter than the bar.
-            Row(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth()
-                    .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .clip(pillShape)
-                        .background(palette.surfaceSecondary)
-                        .border(1.dp, palette.outlineVariant.copy(alpha = 0.6f), pillShape)
-                        .clayFocusableClickable(palette, shape = pillShape, onClick = onBackToLibrary)
-                        .testTag("reader_back_to_library_btn")
-                        .padding(horizontal = ClaySpacing.sm, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text("←", color = palette.onSurfaceVariant, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = "Biblioteca",
-                        color = palette.onSurfaceVariant,
-                        style = LocalClayTypography.current.labelLg,
-                        maxLines = 1,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = "BIBLIOTECA",
-                            color = palette.textMuted,
-                            style = LocalClayTypography.current.labelSm,
-                            maxLines = 1,
-                        )
-                        Text("/", color = palette.outlineVariant, style = LocalClayTypography.current.labelSm)
-                        Text(
-                            text = book.format.label.uppercase(),
-                            color = palette.primary,
-                            style = LocalClayTypography.current.labelSm,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                    ) {
-                        Text(
-                            text = book.title,
-                            color = palette.onSurface,
-                            style = LocalClayTypography.current.titleMd,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (chapterNumber > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(pillShape)
-                                    .background(palette.primaryContainer)
-                                    .padding(horizontal = ClaySpacing.xs, vertical = 2.dp),
-                            ) {
-                                Text(
-                                    text = "Cap. $chapterNumber",
-                                    color = palette.onPrimaryContainer,
-                                    style = LocalClayTypography.current.labelSm,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 // =========================================================================================
 // 2. STITCH DESKTOP READER WORKSPACE: BOOK SPREAD + SWALLOWTAIL RIBBON + COMMAND DOCK
 // =========================================================================================
@@ -460,17 +360,9 @@ internal fun StitchDesktopReaderSpreadWorkspace(
     isTimerRunning: Boolean,
     isZenControlsHidden: Boolean,
     isFullscreen: Boolean,
-    backHistoryTop: NavigationHistoryEntry?,
-    forwardHistoryTop: NavigationHistoryEntry?,
     onPageChange: (Int) -> Unit,
-    onJumpToChapter: (Int, String) -> Unit,
-    onNavigateBack: () -> Unit,
-    onNavigateForward: () -> Unit,
     onSelectViewMode: (PageViewMode) -> Unit,
-    onSelectFitMode: (PageFitMode) -> Unit,
-    onChangeZoomScale: (Float) -> Unit,
     onSelectTheme: (ReaderTheme) -> Unit,
-    onSelectPdfColorMode: (PdfPageColorMode) -> Unit,
     onFontSizeChange: (Float) -> Unit,
     onLineSpacingChange: (Float) -> Unit,
     onUpdateBookTypography: ((BookTypographySettings) -> BookTypographySettings) -> Unit,
@@ -480,87 +372,26 @@ internal fun StitchDesktopReaderSpreadWorkspace(
     onToggleFullscreen: () -> Unit,
     onQuickSavePhrase: (phrase: String, context: String) -> Unit,
     onSetReminderHere: () -> Unit,
-    onOpenNotebook: () -> Unit,
 ) {
     val pagination = LocalReaderPagination.current
     val currentPageObj = book.pages.find { it.pageNumber == book.currentPage } ?: book.pages.first()
+    val isOriginalPdf = book.hasOriginalPage(currentPageObj) && !bookTypography.pdfPreferReflowText
     val secondPageObj = if (viewMode == PageViewMode.TWO_COLUMNS && book.currentPage < book.totalPages) {
         book.pages.find { it.pageNumber == book.currentPage + 1 }
     } else {
         null
     }
-    val tocEntries = remember(book.id, book.pages.size) { book.tableOfContents }
-    var showTocBar by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.canvas)
             .padding(
-                horizontal = if (isZenControlsHidden) 14.dp else 24.dp,
-                vertical = if (isZenControlsHidden) 10.dp else 16.dp,
+                horizontal = if (isZenControlsHidden) 14.dp else ClaySpacing.md,
+                vertical = ClaySpacing.xs,
             ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 2A. AUXILIARY ARCHIVAL UTILITY BAR (Hidden in Zen Mode so pages fill the workspace)
-        if (!isZenControlsHidden) {
-            ClayReaderToolbar(
-                palette, book, backHistoryTop, forwardHistoryTop, showTocBar, savedPhrases.size,
-                fitMode, zoomScale, pdfPageColorMode, onNavigateBack, onNavigateForward,
-                { showTocBar = !showTocBar }, onOpenNotebook,
-                onSelectFitMode, onChangeZoomScale, onSelectPdfColorMode,
-            )
-        }
-        // Optional Expandable Chapter TOC Jump Strip (records jump in Navigation History)
-        if (!isZenControlsHidden && showTocBar && tocEntries.isNotEmpty()) {
-            val stripShape = RoundedCornerShape(ClayRadius.md)
-            Row(
-                modifier = Modifier
-                    .widthIn(max = 1240.dp)
-                    .fillMaxWidth()
-                    .padding(bottom = ClaySpacing.xs)
-                    .clip(stripShape)
-                    .background(palette.surfaceSecondary)
-                    .clayPressed(stripShape)
-                    // `clayPressed` paints its inset band 4..12dp inside the edge; padding the
-                    // chips/`Ir al capítulo` label by `sm` keeps them clear of it.
-                    .padding(horizontal = ClaySpacing.sm, vertical = ClaySpacing.sm)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Ir al capítulo:",
-                    color = palette.textMuted,
-                    style = LocalClayTypography.current.labelSm,
-                    maxLines = 1,
-                )
-                tocEntries.forEach { entry ->
-                    val isCurrentChap = currentPageObj.chapterTitle.startsWith(entry.title)
-                    val chipShape = RoundedCornerShape(percent = 50)
-                    Box(
-                        modifier = Modifier
-                            .clip(chipShape)
-                            .background(if (isCurrentChap) palette.primary else palette.surfaceContainerLowest)
-                            .border(1.dp, palette.outlineVariant, chipShape)
-                            .clayFocusableClickable(palette, chipShape) {
-                                onJumpToChapter(entry.startPage, entry.title)
-                            }
-                            .padding(horizontal = ClaySpacing.sm, vertical = 6.dp)
-                            .testTag("toc_chapter_${entry.startPage}"),
-                    ) {
-                        Text(
-                            text = "${entry.title.take(36)} (p.${entry.startPage})",
-                            color = if (isCurrentChap) palette.onPrimary else palette.onSurface,
-                            fontSize = 11.sp,
-                            fontWeight = if (isCurrentChap) FontWeight.SemiBold else FontWeight.Normal,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-        }
-
         // 2B. BOOK OPEN SPREAD SHELL WITH DRAPED SWALLOWTAIL RIBBON BOOKMARK
         val baseSpreadWidth = when {
             isZenControlsHidden && viewMode == PageViewMode.ONE_COLUMN -> 980.dp
@@ -568,8 +399,8 @@ internal fun StitchDesktopReaderSpreadWorkspace(
             viewMode == PageViewMode.ONE_COLUMN ||
                 viewMode == PageViewMode.VERTICAL_PAGINATED ||
                 viewMode == PageViewMode.VERTICAL_CONTINUOUS ||
-                viewMode == PageViewMode.REFLOW_TEXT -> 880.dp
-            else -> 1240.dp
+                viewMode == PageViewMode.REFLOW_TEXT -> 1040.dp
+            else -> 1440.dp
         }
         val maxSpreadWidth = when (fitMode) {
             PageFitMode.FIT_WIDTH -> 1680.dp
@@ -592,7 +423,8 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 .weight(1f)
                 .widthIn(max = maxSpreadWidth)
                 .fillMaxWidth()
-                .then(if (viewMode == PageViewMode.VERTICAL_CONTINUOUS) Modifier else Modifier.readerPageGestures(book.id to viewMode) { direction ->
+                .testTag("reader_canvas")
+                .then(if (viewMode == PageViewMode.VERTICAL_CONTINUOUS || book.format == DocumentFormat.PDF) Modifier else Modifier.readerPageGestures(book.id to viewMode) { direction ->
                     pagination.turn(book, step, direction, onPageChange)
                 }),
             contentAlignment = Alignment.TopCenter,
@@ -607,7 +439,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 when (viewMode) {
                 PageViewMode.TWO_COLUMNS -> {
                     // Dual-Page Open Book Spread: one clay sheet with the two leaves and the spine crease.
-                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize(), plain = isOriginalPdf) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             Row(modifier = Modifier.fillMaxSize()) {
                                 // Left Page (Verso)
@@ -689,7 +521,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                             }
 
                             // Center Book Crease & Spine Shadow Gradient — alphas follow the sheet tone.
-                            Box(
+                            if (!isOriginalPdf) Box(
                                 modifier = Modifier
                                     .align(Alignment.Center)
                                     .width(16.dp)
@@ -719,7 +551,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 }
 
                 PageViewMode.ONE_COLUMN -> {
-                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize(), plain = isOriginalPdf) {
                         StitchBookSpreadLeaf(
                             palette = palette,
                             tone = tone,
@@ -800,7 +632,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 }
 
                 PageViewMode.STRETCH -> {
-                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize(), plain = isOriginalPdf) {
                         StitchBookSpreadLeaf(
                             palette = palette,
                             tone = tone,
@@ -825,7 +657,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        ReaderSheetCard(tone = tone, modifier = Modifier.weight(0.72f).fillMaxHeight()) {
+                        ReaderSheetCard(tone = tone, modifier = Modifier.weight(0.72f).fillMaxHeight(), plain = isOriginalPdf) {
                             StitchBookSpreadLeaf(
                                 palette = palette,
                                 tone = tone,
@@ -888,7 +720,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                 val pagePhrases = savedPhrases.filter { it.pageNumber == currentPageObj.pageNumber }
                                 if (pagePhrases.isEmpty()) {
                                     Text(
-                                        text = "Haz clic en cualquier frase sugerida debajo de un párrafo para subrayarla y guardarla en la página ${currentPageObj.pageNumber}.",
+                                        text = "Selecciona una palabra o frase para guardarla en Notebook.",
                                         color = tone.muted,
                                         fontSize = 12.sp,
                                     )
@@ -954,7 +786,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
             // Draped Top-Right Swallowtail Bookmark Ribbon (Shiori 栞) — positioned in reserved right margin so it NEVER overlaps "FOLIO N"
             val isThisPageBookmarked = activeReminder?.pageNumber == currentPageObj.pageNumber ||
                 (secondPageObj != null && activeReminder?.pageNumber == secondPageObj.pageNumber)
-            ClayBookmarkRibbon(
+            if (!isOriginalPdf || isThisPageBookmarked) ClayBookmarkRibbon(
                 isActive = isThisPageBookmarked,
                 tint = palette.warningAmber,
                 width = 28.dp,
@@ -1110,8 +942,13 @@ internal fun ReaderSheetCard(
     tone: ReadingTone,
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(ClayRadius.lg),
+    plain: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    if (plain) {
+        Box(modifier, content = content)
+        return
+    }
     ClayShadowBox(
         shadow = ClayShadows.card,
         shape = shape,
@@ -1227,6 +1064,10 @@ internal fun StitchBookSpreadLeaf(
     onQuickSavePhrase: (phrase: String, context: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (book.hasOriginalPage(page) && !bookTypography.pdfPreferReflowText) {
+        OriginalPdfPage(book, page, tone, pdfPageColorMode, modifier.padding(8.dp))
+        return
+    }
     val pagePhrases = remember(savedPhrases, page.pageNumber) {
         savedPhrases.filter { it.pageNumber == page.pageNumber }
     }
@@ -1448,8 +1289,8 @@ private fun StitchFloatingCommandDock(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = ClaySpacing.md, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             // Top Row: Page Stepper + Interactive Scrubber + Live Reading Pace Telemetry Pill
             Row(
@@ -1653,7 +1494,7 @@ private fun StitchFloatingCommandDock(
                     horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                 ) {
                     Text(
-                        text = "Tono Ambiental",
+                        text = "Tema",
                         color = palette.textMuted,
                         style = LocalClayTypography.current.labelSm,
                     )

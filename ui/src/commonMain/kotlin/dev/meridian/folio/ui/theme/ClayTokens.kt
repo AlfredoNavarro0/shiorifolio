@@ -2,6 +2,7 @@ package dev.meridian.folio.ui.theme
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -16,22 +17,22 @@ import dev.meridian.folio.core.ReaderTheme
  */
 @Immutable
 data class ClayPalette(
-    val canvas: Color = Color(0xFFF4F1FA),
-    val surface: Color = Color(0xFFFEF7FF),
+    val canvas: Color = Color(0xFFF5F4F8),
+    val surface: Color = Color(0xFFFCFBFE),
     val surfaceContainerLowest: Color = Color(0xFFFFFFFF),
-    val surfaceContainerLow: Color = Color(0xFFF9F1FF),
-    val surfaceContainer: Color = Color(0xFFF3EBFA),
-    val surfaceContainerHigh: Color = Color(0xFFEDE5F4),
-    val surfaceContainerHighest: Color = Color(0xFFE7E0EE),
-    val surfaceSecondary: Color = Color(0xFFEFEBF5),
-    val cardSurface: Color = Color.White.copy(alpha = 0.75f),
+    val surfaceContainerLow: Color = Color(0xFFF9F8FC),
+    val surfaceContainer: Color = Color(0xFFF3F1F7),
+    val surfaceContainerHigh: Color = Color(0xFFEEEBF3),
+    val surfaceContainerHighest: Color = Color(0xFFE6E2ED),
+    val surfaceSecondary: Color = Color(0xFFF0EEF5),
+    val cardSurface: Color = Color.White,
     val onSurface: Color = Color(0xFF332F3A),
     val onSurfaceVariant: Color = Color(0xFF4A4455),
     val textMuted: Color = Color(0xFF635F69),
     val outline: Color = Color(0xFF7B7487),
-    val outlineVariant: Color = Color(0xFFCCC3D8),
-    val primary: Color = Color(0xFF7C3AED),
-    val primaryDeep: Color = Color(0xFF630ED4),
+    val outlineVariant: Color = Color(0xFFDED9E7),
+    val primary: Color = Color(0xFF7354C8),
+    val primaryDeep: Color = Color(0xFF6040B1),
     val onPrimary: Color = Color(0xFFFFFFFF),
     val primaryContainer: Color = Color(0xFFEDE0FF),
     val onPrimaryContainer: Color = Color(0xFF25005A),
@@ -59,9 +60,9 @@ data class ClayPalette(
     fun highlightColor(tone: HighlightTone): Color =
         Color(if (isDarkReading) tone.hexDark else tone.hexLight)
 
-    /** Material 3 color scheme mapped from the clay tokens (light chrome). */
+    /** Native menus, dialogs and controls share the global app palette. */
     fun toMaterialColorScheme(): ColorScheme =
-        lightColorScheme(
+        (if (isDarkReading) darkColorScheme() else lightColorScheme()).copy(
             primary = primary,
             onPrimary = onPrimary,
             primaryContainer = primaryContainer,
@@ -81,13 +82,19 @@ data class ClayPalette(
             surface = surface,
             onSurface = onSurface,
             surfaceVariant = surfaceSecondary,
+            surfaceTint = primary,
+            surfaceContainerLowest = surfaceContainerLowest,
+            surfaceContainerLow = surfaceContainerLow,
+            surfaceContainer = surfaceContainer,
+            surfaceContainerHigh = surfaceContainerHigh,
+            surfaceContainerHighest = surfaceContainerHighest,
             onSurfaceVariant = onSurfaceVariant,
             outline = outline,
             outlineVariant = outlineVariant,
         )
 }
 
-/** Reading sheet tone: only the reading surface is tinted; the app chrome stays clay. */
+/** Reading content colors, kept separate from the surrounding application surfaces. */
 @Immutable
 data class ReadingTone(
     val isDark: Boolean,
@@ -105,10 +112,59 @@ data class ReadingTone(
 
 /** Token accessors for the Stitch "Tactile Claymorphism" design system. */
 object ClayTokens {
-    /** App chrome palette (always the light lavender canvas). */
-    fun chrome(highContrast: Boolean = false): ClayPalette {
-        val base = ClayPalette()
+    /** Global palette: navigation, panels, controls and dialogs follow the selected theme. */
+    fun chrome(highContrast: Boolean = false, theme: ReaderTheme = ReaderTheme.WHITE): ClayPalette {
+        val base = when (theme) {
+            ReaderTheme.WHITE -> ClayPalette()
+            ReaderTheme.SEPIA -> ClayPalette().copy(
+                canvas = Color(0xFFEEE7DA), surface = Color(0xFFF8F1E5),
+                surfaceContainerLowest = Color(0xFFFFFCF6), surfaceContainerLow = Color(0xFFF9F3E8),
+                surfaceContainer = Color(0xFFF1E8D9), surfaceContainerHigh = Color(0xFFE9DECC),
+                surfaceContainerHighest = Color(0xFFE0D2BD), surfaceSecondary = Color(0xFFF1E8D9),
+                cardSurface = Color(0xFFFFFBF3), onSurface = Color(0xFF382D22),
+                onSurfaceVariant = Color(0xFF554634), textMuted = Color(0xFF6A5A48),
+                outline = Color(0xFF8C785E), outlineVariant = Color(0xFFD5C8B4),
+                primary = Color(0xFF795638), primaryDeep = Color(0xFF67472E),
+                primaryContainer = Color(0xFFEFDFC2), onPrimaryContainer = Color(0xFF3A2814),
+                focusRing = Color(0xFF795638),
+            )
+            ReaderTheme.SAGE -> ClayPalette().copy(
+                canvas = Color(0xFFE8EFE9), surface = Color(0xFFF5F9F5),
+                surfaceContainerLowest = Color(0xFFFAFDFA), surfaceContainerLow = Color(0xFFF1F6F1),
+                surfaceContainer = Color(0xFFE7EFE8), surfaceContainerHigh = Color(0xFFDFE9E0),
+                surfaceContainerHighest = Color(0xFFD4E1D6), surfaceSecondary = Color(0xFFE2EBE3),
+                cardSurface = Color(0xFFF8FCF8), onSurface = Color(0xFF25372B),
+                onSurfaceVariant = Color(0xFF3F5446), textMuted = Color(0xFF536658),
+                outline = Color(0xFF738B79), outlineVariant = Color(0xFFBDCFBF),
+                primary = Color(0xFF365F49), primaryDeep = Color(0xFF274D38),
+                primaryContainer = Color(0xFFCFE2D2), onPrimaryContainer = Color(0xFF1C3B28),
+                focusRing = Color(0xFF365F49),
+            )
+            ReaderTheme.DARK -> ClayPalette().copy(
+                canvas = Color(0xFF18171E), surface = Color(0xFF211F29),
+                surfaceContainerLowest = Color(0xFF16151B), surfaceContainerLow = Color(0xFF24222C),
+                surfaceContainer = Color(0xFF2A2733), surfaceContainerHigh = Color(0xFF302D3A),
+                surfaceContainerHighest = Color(0xFF3B3646), surfaceSecondary = Color(0xFF2A2733),
+                cardSurface = Color(0xFF25222D), onSurface = Color(0xFFF2EEF8),
+                onSurfaceVariant = Color(0xFFD4CDDF), textMuted = Color(0xFFB6ADC5),
+                outline = Color(0xFF91869F), outlineVariant = Color(0xFF4C445B),
+                primary = Color(0xFFBDA4FF), primaryDeep = Color(0xFFA88BED), onPrimary = Color(0xFF251742),
+                primaryContainer = Color(0xFF3D3059), onPrimaryContainer = Color(0xFFEADDFF),
+                secondary = Color(0xFFF1A2C6), onSecondary = Color(0xFF45112B),
+                secondaryContainer = Color(0xFF4B283D), onSecondaryContainer = Color(0xFFFFD9E2),
+                tertiary = Color(0xFF8CCFFF), onTertiary = Color(0xFF102F40),
+                successMint = Color(0xFF73D9AE), warningAmber = Color(0xFFFFC875),
+                error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+                errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
+                disabledContent = Color(0xFF8C829C), disabledContainer = Color(0xFF302B3B),
+                focusRing = Color(0xFFD2BBFF), isDarkReading = true,
+            )
+        }
         if (!highContrast) return base
+        if (base.isDarkReading) return base.copy(
+            onSurface = Color.White, onSurfaceVariant = Color(0xFFF1EDF8),
+            textMuted = Color(0xFFD4CDDF), outlineVariant = Color(0xFFA89DB8),
+        )
         return base.copy(
             onSurface = Color(0xFF0A0A08),
             onSurfaceVariant = Color(0xFF1F241F),
@@ -193,10 +249,10 @@ object ClaySpacing {
 /** Corner radii (dp) from the design system. */
 object ClayRadius {
     val sm: Dp = 8.dp
-    val base: Dp = 16.dp
-    val md: Dp = 24.dp
-    val lg: Dp = 32.dp
-    val xl: Dp = 48.dp
+    val base: Dp = 12.dp
+    val md: Dp = 20.dp
+    val lg: Dp = 24.dp
+    val xl: Dp = 32.dp
 }
 
 /** One step of the clay type scale (converted into TextStyles by the theme layer). */
@@ -241,41 +297,39 @@ data class ClayShadowStack(
     val inner: List<ClayShadowLayer>,
 )
 
-/** Clay shadow stacks with the literal values from the DESIGN.md. */
+/** Restrained clay depth: short offsets, neutral shadows and a fine light rim. */
 object ClayShadows {
     val card = ClayShadowStack(
         outer = listOf(
-            ClayShadowLayer(16.dp, 16.dp, 32.dp, Color(0x38A096B4)),
-            ClayShadowLayer((-10).dp, (-10).dp, 24.dp, Color(0xF2FFFFFF)),
+            ClayShadowLayer(0.dp, 3.dp, 12.dp, Color(0x143B304F)),
+            ClayShadowLayer(0.dp, 1.dp, 3.dp, Color(0x083B304F)),
         ),
         inner = listOf(
-            ClayShadowLayer(6.dp, 6.dp, 12.dp, Color(0x0A8B5CF6)),
-            ClayShadowLayer((-6).dp, (-6).dp, 12.dp, Color(0xFFFFFFFF)),
+            ClayShadowLayer(0.dp, 1.dp, 2.dp, Color(0x08FFFFFF)),
+            ClayShadowLayer(0.dp, (-1).dp, 2.dp, Color(0x28FFFFFF)),
         ),
     )
     val button = ClayShadowStack(
         outer = listOf(
-            ClayShadowLayer(10.dp, 10.dp, 20.dp, Color(0x477C3AED)),
-            ClayShadowLayer((-6).dp, (-6).dp, 14.dp, Color(0xB3FFFFFF)),
+            ClayShadowLayer(0.dp, 2.dp, 6.dp, Color(0x247354C8)),
+            ClayShadowLayer(0.dp, 1.dp, 2.dp, Color(0x103B304F)),
         ),
         inner = listOf(
-            ClayShadowLayer(3.dp, 3.dp, 6.dp, Color(0x66FFFFFF)),
-            ClayShadowLayer((-3).dp, (-3).dp, 6.dp, Color(0x1F000000)),
+            ClayShadowLayer(0.dp, 1.dp, 2.dp, Color(0x38FFFFFF)),
+            ClayShadowLayer(0.dp, (-1).dp, 2.dp, Color(0x10000000)),
         ),
     )
     val pressed = ClayShadowStack(
         outer = emptyList(),
         inner = listOf(
-            ClayShadowLayer(8.dp, 8.dp, 16.dp, Color(0xFFD9D4E3)),
-            ClayShadowLayer((-8).dp, (-8).dp, 16.dp, Color(0xFFFFFFFF)),
+            ClayShadowLayer(0.dp, 1.dp, 3.dp, Color(0x183B304F)),
+            ClayShadowLayer(0.dp, (-1).dp, 2.dp, Color(0x60FFFFFF)),
         ),
     )
     val floating = ClayShadowStack(
         outer = listOf(
-            // 0 20px 35px -8px rgba(124,58,237,0.2)
-            ClayShadowLayer(0.dp, 20.dp, 35.dp, Color(0x337C3AED), spread = (-8).dp),
-            // 0 10px 15px -5px rgba(0,0,0,0.04)
-            ClayShadowLayer(0.dp, 10.dp, 15.dp, Color(0x0A000000), spread = (-5).dp),
+            ClayShadowLayer(0.dp, 5.dp, 16.dp, Color(0x183B304F), spread = (-2).dp),
+            ClayShadowLayer(0.dp, 1.dp, 4.dp, Color(0x0C3B304F)),
         ),
         inner = emptyList(),
     )

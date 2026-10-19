@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.captureToImage
@@ -24,24 +23,45 @@ import kotlin.test.assertTrue
 /**
  * Contract of the claymorphic shell ([ShellChrome]): the wordmark, the four section tabs, the
  * theme toggle, the footer tally and the compact bottom navigation that the pre-migration tests
- * relied on must keep their exact tags and text, and the chrome must stay usable (and light)
+ * relied on must keep their exact tags and text, and the chrome must stay usable
  * whatever the reading tone is.
  */
 @OptIn(ExperimentalTestApi::class)
 class ClayShellTest {
 
     @Test
-    fun clayTopNavShowsWordmarkAndEverySectionTab() = runComposeUiTest {
+    fun appOpensInLibraryAndReaderKeepsSecondaryToolsInTheMenu() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         setContent { MeridianFolioApp(repository = repo) }
+        onNodeWithTag("library_workspace").assertExists()
+        onNodeWithTag("reader_book_strip").assertDoesNotExist()
+        onNodeWithTag("section_tab_READER").performClick()
+        onNodeWithTag("reader_book_strip").assertExists()
+        onNodeWithTag("open_page_editor_btn").assertDoesNotExist()
+        onNodeWithTag("reader_search_btn").assertDoesNotExist()
+        onNodeWithTag("reader_tools_menu").performClick()
+        onNodeWithTag("open_page_editor_btn").assertExists()
+        onNodeWithTag("reader_search_btn").assertExists()
+        onNodeWithText("Ctrl + F").assertExists()
+        repo.updateKeyBinding(dev.meridian.folio.core.ReaderAction.FIND_IN_BOOK,
+            dev.meridian.folio.core.KeyBindingSpec("G", ctrl = true))
+        waitForIdle()
+        onNodeWithText("Ctrl + G").assertExists()
+    }
+
+    @Test
+    fun clayTopNavShowsWordmarkAndEverySectionTab() = runComposeUiTest {
+        val repo = FolioRepository(persistToDisk = false)
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         // The card must be explicitly sized: ClayCard cannot size itself (its shadow and
         // frosted layers are matchParentSize children), so a 0×0 pill would mean a regression.
         onNodeWithTag("clay_top_nav")
             .assertExists()
             .assertWidthIsAtLeast(900.dp)
-            .assertHeightIsAtLeast(60.dp)
+            .assertHeightIsEqualTo(56.dp)
         onNodeWithText("shiorifolio").assertExists()
+        onNodeWithTag("app_logo").assertExists().assertWidthIsAtLeast(28.dp)
         for (section in MeridianSection.entries) {
             onNodeWithTag("section_tab_${section.name}").assertExists()
         }
@@ -52,7 +72,7 @@ class ClayShellTest {
     @Test
     fun sectionTabClickUpdatesActiveSection() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         onNodeWithTag("section_tab_LIBRARY").performClick()
         waitForIdle()
@@ -66,7 +86,7 @@ class ClayShellTest {
     @Test
     fun themeToggleButtonSwitchesBetweenWhiteAndDark() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         assertEquals(ReaderTheme.WHITE, repo.state.value.theme)
         onNodeWithTag("theme_toggle_button").performClick()
@@ -79,30 +99,29 @@ class ClayShellTest {
     fun clayFooterRendersBrandAndLibraryTally() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         val count = repo.state.value.documents.size
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
+        onNodeWithTag("clay_footer").assertDoesNotExist()
+        onNodeWithTag("section_tab_LIBRARY").performClick()
         onNodeWithTag("clay_footer").assertExists()
         onNodeWithText("ShioriFolio · Lector y editor de PDF & EPUB").assertExists()
         onNodeWithText("$count títulos en tu biblioteca").assertExists()
     }
 
     @Test
-    fun clayChromeStaysLightWithDarkReadingTone() = runComposeUiTest {
+    fun navigationFollowsTheGlobalDarkTheme() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         repo.setTheme(ReaderTheme.DARK)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
-        // The shell never adopts the reading sheet tone: the theme state is reflected in the
-        // toggle label, but the chrome itself keeps the light clay palette.
+        // The selected global theme must reach both navigation and reading controls.
         onNodeWithTag("clay_top_nav").assertExists()
-        onNodeWithText("☾  Oscuro").assertExists()
+        onNodeWithTag("theme_toggle_button").assertExists()
         onNodeWithText("shiorifolio").assertExists()
-        onNodeWithTag("clay_footer").assertExists()
+        onNodeWithTag("reader_dock").assertExists()
         assertEquals(ReaderTheme.DARK, repo.state.value.theme)
 
-        // Sample a band just under the top edge of the pill (card surface, clear of the tab
-        // labels) and require it to be light; a chrome that followed the dark reading tone
-        // would sample at roughly a third of this luminance.
+        // Sample the card surface above the labels: light chrome here is a regression.
         val nav = onNodeWithTag("clay_top_nav").captureToImage()
         val pixels = nav.toPixelMap()
         val y = (nav.height * 0.05f).toInt().coerceAtLeast(2)
@@ -111,8 +130,8 @@ class ClayShellTest {
             val pixel = pixels[x, y]
             val luminance = 0.2126f * pixel.red + 0.7152f * pixel.green + 0.0722f * pixel.blue
             assertTrue(
-                luminance > 0.45f,
-                "clay chrome must stay light with a dark reading tone (luminance $luminance at $x,$y)",
+                luminance < 0.35f,
+                "navigation must follow the dark theme (luminance $luminance at $x,$y)",
             )
         }
     }
@@ -124,7 +143,7 @@ class ClayShellTest {
         // takes over, and the four tabs no longer fit in the bottom bar.
         setContent {
             Box(Modifier.size(300.dp, 640.dp)) {
-                MeridianFolioApp(repository = repo)
+                MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
             }
         }
 
@@ -155,10 +174,10 @@ class ClayShellTest {
     @Test
     fun mobilePreviewToggleRevealsBottomNavInsteadOfTopNav() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         // The toggle lives at the end of the horizontally scrolling reader action bar.
-        onNodeWithTag("mobile_preview_toggle").performScrollTo().performClick()
+        readerMenuItem("mobile_preview_toggle").performScrollTo().performClick()
         waitForIdle()
 
         onNodeWithTag("clay_bottom_nav").assertExists()
@@ -167,22 +186,25 @@ class ClayShellTest {
     }
 
     @Test
-    fun zenModeHidesFooterWithTheRestOfTheChrome() = runComposeUiTest {
+    fun zenModeHidesReaderChromeAndRestoresItOnExit() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
-        onNodeWithTag("clay_footer").assertExists()
+        onNodeWithTag("clay_footer").assertDoesNotExist()
+        onNodeWithTag("reader_dock").assertExists()
         onNodeWithTag("clay_top_nav").assertExists()
 
-        onNodeWithTag("zen_mode_toggle_btn").performClick()
+        readerMenuItem("zen_mode_toggle_btn").performClick()
         waitForIdle()
         // Zen Mode hides the whole shell chrome, footer included.
         onNodeWithTag("clay_footer").assertDoesNotExist()
+        onNodeWithTag("reader_dock").assertDoesNotExist()
         onNodeWithTag("clay_top_nav").assertDoesNotExist()
 
         onNodeWithTag("exit_zen_mode_btn").performClick()
         waitForIdle()
-        onNodeWithTag("clay_footer").assertExists()
+        onNodeWithTag("clay_footer").assertDoesNotExist()
+        onNodeWithTag("reader_dock").assertExists()
         onNodeWithTag("clay_top_nav").assertExists()
     }
 }

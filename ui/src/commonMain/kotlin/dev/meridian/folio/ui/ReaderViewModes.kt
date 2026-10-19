@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,7 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -91,7 +89,7 @@ internal fun ZoomAndFitControlStrip(
     onChangeZoomScale: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val wellShape = RoundedCornerShape(ClayRadius.sm)
+    val wellShape = RoundedCornerShape(percent = 50)
     val itemShape = RoundedCornerShape(percent = 50)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -99,7 +97,7 @@ internal fun ZoomAndFitControlStrip(
         modifier = modifier
             .clip(wellShape)
             .background(palette.surfaceSecondary)
-            .border(1.dp, palette.outlineVariant, wellShape)
+            .heightIn(min = 40.dp)
             .padding(horizontal = 6.dp, vertical = 3.dp)
             .testTag("zoom_fit_control_strip"),
     ) {
@@ -107,7 +105,7 @@ internal fun ZoomAndFitControlStrip(
         Box(
             modifier = Modifier
                 .clip(itemShape)
-                .background(if (fitPageSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
+                .background(if (fitPageSelected) palette.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
                 .clayFocusableClickable(palette, itemShape) {
                     onSelectFitMode(PageFitMode.FIT_PAGE)
                 }
@@ -116,7 +114,7 @@ internal fun ZoomAndFitControlStrip(
         ) {
             Text(
                 text = "Ajustar Pág.",
-                color = if (fitPageSelected) palette.onPrimary else palette.onSurfaceVariant,
+                color = if (fitPageSelected) palette.onPrimaryContainer else palette.onSurfaceVariant,
                 style = LocalClayTypography.current.labelSm,
                 fontWeight = if (fitPageSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
@@ -126,7 +124,7 @@ internal fun ZoomAndFitControlStrip(
         Box(
             modifier = Modifier
                 .clip(itemShape)
-                .background(if (fitWidthSelected) palette.primary else androidx.compose.ui.graphics.Color.Transparent)
+                .background(if (fitWidthSelected) palette.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
                 .clayFocusableClickable(palette, itemShape) {
                     onSelectFitMode(PageFitMode.FIT_WIDTH)
                 }
@@ -135,7 +133,7 @@ internal fun ZoomAndFitControlStrip(
         ) {
             Text(
                 text = "Ajustar Ancho",
-                color = if (fitWidthSelected) palette.onPrimary else palette.onSurfaceVariant,
+                color = if (fitWidthSelected) palette.onPrimaryContainer else palette.onSurfaceVariant,
                 style = LocalClayTypography.current.labelSm,
                 fontWeight = if (fitWidthSelected) FontWeight.SemiBold else FontWeight.Medium,
             )
@@ -205,8 +203,9 @@ internal fun VerticalPaginatedReaderCanvas(
     val pagination = LocalReaderPagination.current
     ReaderSheetCard(
         tone = tone,
+        plain = book.hasOriginalPage(page) && !bookTypography.pdfPreferReflowText,
         modifier = modifier.fillMaxSize().testTag("vertical_paginated_canvas")
-            .readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) },
+            .then(if (book.format == DocumentFormat.PDF) Modifier else Modifier.readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) }),
     ) {
         StitchBookSpreadLeaf(palette, tone, pdfPageColorMode, book, page, savedPhrases, effectiveFontSize,
             effectiveFontSize * lineSpacingMultiplier, bookTypography, isLeftLeaf = false,
@@ -236,14 +235,21 @@ internal fun VerticalContinuousReaderCanvas(
     onRunOcrOnPage: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (book.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText && book.pages.any { book.hasOriginalPage(it) }) {
+        ContinuousPdfPages(book, tone, pdfPageColorMode, onPageChange,
+            modifier.testTag("vertical_continuous_canvas"))
+        return
+    }
     val reconstruction = remember(book.id, book.pages, bookTypography.normalizeExcessiveSpaces) {
         PdfReflowEngine.buildContinuousFlow(
             book = book,
             normalizeSpaces = bookTypography.normalizeExcessiveSpaces,
+            preservePageBoundaries = true,
         )
     }
 
-    val listState = rememberLazyListState()
+    val sourcePages = remember(reconstruction.items) { reconstruction.items.map { it.sourcePageNumber } }
+    val listState = rememberSourcePageListState(book.id, sourcePages, book.currentPage, onPageChange)
     val effectiveFontSize = (fontSizePt * zoomScale.coerceIn(0.70f, 1.80f)).coerceIn(12f, 34f)
     val effectiveLineHeight = effectiveFontSize * lineSpacingMultiplier
     val contentFontFamily = bookTypography.fontFamily.toComposeFontFamily()
@@ -276,10 +282,10 @@ internal fun VerticalContinuousReaderCanvas(
                 onRunOcrOnPage = onRunOcrOnPage,
             )
 
-            SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            ReaderTextSelection(book.id, book.currentPage, Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag("continuous_page_list"),
                     verticalArrangement = Arrangement.spacedBy(paraSpacing),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
@@ -536,7 +542,7 @@ internal fun ReflowStatusAndReliabilityBanner(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReflowBlockItemView(
+internal fun ReflowBlockItemView(
     tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
@@ -608,7 +614,7 @@ private fun ReflowBlockItemView(
     }
 
     val annotated = remember(item.text, pagePhrases, tone) {
-        buildHighlightedAnnotatedString(item.text, pagePhrases, tone)
+        buildHighlightedAnnotatedString(item.text, pagePhrases, tone).withReaderSource(item.sourcePageNumber, item.text)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -709,37 +715,6 @@ private fun ReflowBlockItemView(
             }
         }
 
-        val candidates = remember(item.text) { extractCandidatePhrases(item.text) }
-        if (candidates.isNotEmpty() && item.style != BlockStyle.HEADING && item.text.length >= 60) {
-            Spacer(modifier = Modifier.height(3.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                candidates.forEach { candidate ->
-                    val alreadySaved = pagePhrases.any { it.phrase.equals(candidate, ignoreCase = true) }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(
-                                if (alreadySaved) {
-                                    readingHighlight(tone, HighlightTone.SAGE)
-                                } else {
-                                    tone.border.copy(alpha = 0.35f)
-                                },
-                            )
-                            .clickable { onQuickSavePhrase(candidate, item.text) }
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = if (alreadySaved) "✓ $candidate" else "+ $candidate",
-                            color = tone.inkSoft,
-                            fontSize = 9.5.sp,
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 

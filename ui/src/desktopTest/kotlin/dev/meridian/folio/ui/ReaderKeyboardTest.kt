@@ -9,12 +9,23 @@ import kotlin.test.assertEquals
 @OptIn(ExperimentalTestApi::class)
 class ReaderKeyboardTest {
     @Test
+    fun searchShortcutOpensTheSearchWithoutExposingAnExtraToolbarButton() = runComposeUiTest {
+        val repo = FolioRepository(persistToDisk = false)
+        setContent { MeridianFolioApp(repository = repo, initialSection = MeridianSection.READER) }
+        onNodeWithTag("reader_search_btn").assertDoesNotExist()
+        onNodeWithTag("meridian_root").performKeyInput {
+            keyDown(Key.CtrlLeft); pressKey(Key.F); keyUp(Key.CtrlLeft)
+        }
+        onNodeWithTag("search_replace_dialog").assertExists()
+    }
+
+    @Test
     fun pageKeysWorkImmediatelyWithoutClickingReaderControls() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         repo.state.value.documents.forEach { book -> book.pages.forEach { page ->
             repo.updatePageContent(book.id, page.pageNumber, page.chapterTitle, listOf(ContentBlock("short", text = "Contenido breve de prueba.")))
         } }
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         for (mode in PageViewMode.entries) {
             repo.setViewMode(mode)
@@ -38,7 +49,7 @@ class ReaderKeyboardTest {
         } }
         repo.setViewMode(PageViewMode.ONE_COLUMN)
         repo.goToPage(repo.currentBook()!!.id, 1)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         onNodeWithTag("section_tab_LIBRARY").performClick()
         onNodeWithTag("library_search").performClick().performTextInput("Meridian")
@@ -49,9 +60,9 @@ class ReaderKeyboardTest {
         }
         assertEquals(ReaderTheme.WHITE, repo.state.value.theme, "Global shortcuts must not hijack text input")
         onNodeWithTag("meridian_root").performKeyInput {
-            keyDown(Key.CtrlLeft); keyDown(Key.ShiftLeft)
+            keyDown(Key.CtrlLeft)
             pressKey(Key.Tab)
-            keyUp(Key.ShiftLeft); keyUp(Key.CtrlLeft)
+            keyUp(Key.CtrlLeft)
         }
         onNodeWithTag("meridian_root").performKeyInput { pressKey(Key.PageDown) }
         assertEquals(2, repo.currentBook()!!.currentPage)
@@ -74,7 +85,7 @@ class ReaderKeyboardTest {
         repo.setViewMode(PageViewMode.ONE_COLUMN)
         repo.updateKeyBinding(ReaderAction.NEXT_PAGE, KeyBindingSpec("N"))
         repo.updateKeyBinding(ReaderAction.PREV_PAGE, KeyBindingSpec("P"))
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         val book = repo.state.value.documents.first { it.id != repo.currentBook()!!.id }
         repo.selectBook(book.id)
@@ -83,7 +94,7 @@ class ReaderKeyboardTest {
         waitForIdle()
         onNodeWithTag("meridian_root").performKeyInput { pressKey(Key.N) }
         assertEquals(2, repo.currentBook()!!.currentPage)
-        onNodeWithTag("zen_mode_toggle_btn").performClick()
+        readerMenuItem("zen_mode_toggle_btn").performClick()
         onNodeWithTag("meridian_root").performKeyInput { pressKey(Key.P) }
         assertEquals(1, repo.currentBook()!!.currentPage)
         onNodeWithTag("meridian_root").performKeyInput { pressKey(Key.Escape) }
@@ -98,7 +109,7 @@ class ReaderKeyboardTest {
             repo.updatePageContent(book.id, page.pageNumber, page.chapterTitle, listOf(ContentBlock("short", text = "Contenido breve de prueba.")))
         } }
         var fullscreenCount = 0
-        setContent { MeridianFolioApp(repository = repo, onToggleWindowFullscreen = { fullscreenCount++ }) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo, onToggleWindowFullscreen = { fullscreenCount++ }) }
         onNodeWithTag("meridian_root").performKeyInput {
             keyDown(Key.CtrlLeft); pressKey(Key.T); keyUp(Key.CtrlLeft)
         }
@@ -125,7 +136,7 @@ class ReaderKeyboardTest {
         onNodeWithTag("meridian_root").performKeyInput {
             keyDown(Key.CtrlLeft); pressKey(Key.Tab); keyUp(Key.CtrlLeft)
         }
-        onNodeWithTag("library_workspace").assertExists()
+        onNodeWithTag("notebook_header").assertExists()
         onNodeWithTag("section_tab_SETTINGS").performClick()
         onNodeWithTag("settings_category_shortcuts").performClick()
         onNodeWithTag("rebind_action_NEXT_PAGE").performScrollTo().performClick()

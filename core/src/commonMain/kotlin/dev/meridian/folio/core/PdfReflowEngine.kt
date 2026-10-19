@@ -95,6 +95,7 @@ object PdfReflowEngine {
         val fullResult = buildContinuousFlow(
             book = book.copy(pages = windowPages),
             normalizeSpaces = normalizeSpaces,
+            preservePageBoundaries = true,
         )
         val pageItems = fullResult.items.filter { it.sourcePageNumber == page.pageNumber }
         val pageScanned = fullResult.scannedPageNumbers.filter { it == page.pageNumber }
@@ -111,6 +112,7 @@ object PdfReflowEngine {
     fun buildContinuousFlow(
         book: BookDocument,
         normalizeSpaces: Boolean = true,
+        preservePageBoundaries: Boolean = false,
     ): ReflowReconstructionResult {
         val isPdf = book.format == DocumentFormat.PDF
         val normalizedBookTitle = book.title.trim().lowercase()
@@ -196,6 +198,7 @@ object PdfReflowEngine {
                 // or artificial mid-sentence split (Imagen 3 fix!)
                 val prevItem = items.lastOrNull()
                 if (prevItem != null &&
+                    (!preservePageBoundaries || prevItem.sourcePageNumber == page.pageNumber) &&
                     !prevItem.isSceneBreak &&
                     prevItem.style == BlockStyle.PARAGRAPH &&
                     (block.style == BlockStyle.PARAGRAPH || (isPdf && block.style == BlockStyle.HEADING && looksLikeSentenceContinuation(prevItem.text, cleanedText))) &&

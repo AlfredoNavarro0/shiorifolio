@@ -29,7 +29,7 @@ class MeridianFolioUiTest {
     fun shioriFolioRendersAndSwitchesViewModesAndThemes() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         // Verify root, brand wordmark "shiorifolio", prediction badge, and reminder banner exist
@@ -71,7 +71,7 @@ class MeridianFolioUiTest {
         val initialReminderCount = repo.state.value.reminders.size
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         onNodeWithTag("open_reminder_btn").performClick()
@@ -89,7 +89,7 @@ class MeridianFolioUiTest {
         var fullscreenToggledCount = 0
 
         setContent {
-            MeridianFolioApp(
+            MeridianFolioApp(initialSection = MeridianSection.READER,
                 repository = repo,
                 isWindowFullscreen = fullscreenToggledCount % 2 == 1,
                 onToggleWindowFullscreen = { fullscreenToggledCount++ },
@@ -103,7 +103,7 @@ class MeridianFolioUiTest {
         onNodeWithTag("prediction_badge").assertExists()
 
         // Enter Zen Mode (hides controls, shows floating exit button)
-        onNodeWithTag("zen_mode_toggle_btn").performClick()
+        readerMenuItem("zen_mode_toggle_btn").performClick()
         onNodeWithTag("exit_zen_mode_btn").assertExists()
         onNodeWithTag("prediction_badge").assertDoesNotExist()
 
@@ -134,7 +134,7 @@ class MeridianFolioUiTest {
         repo.currentBook()!!.pages.forEach { page -> repo.updatePageContent(bookId, page.pageNumber, "Historial", listOf(dev.meridian.folio.core.ContentBlock("short-${page.pageNumber}", text = "Una página breve para probar el historial."))) }
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         // Sequential page turn via next_page_button does NOT create navigation history
@@ -143,7 +143,7 @@ class MeridianFolioUiTest {
         val pageAfterStep = repo.currentBook()!!.currentPage
         assertTrue(pageAfterStep > initialPage)
         assertEquals(0, repo.state.value.navigationBackStack.size)
-        onNodeWithTag("nav_history_back_btn").assertIsNotEnabled()
+        readerMenuItem("nav_history_back_btn").assertIsNotEnabled()
 
         // Semantic jump (e.g., jumping to a chapter or bookmark) records history
         val targetPage = repo.currentBook()!!.totalPages
@@ -153,14 +153,14 @@ class MeridianFolioUiTest {
         assertEquals(1, repo.state.value.navigationBackStack.size)
 
         // Back button becomes enabled in the reader header and restores previous reading position
-        onNodeWithTag("nav_history_back_btn").assertIsEnabled()
-        onNodeWithTag("nav_history_back_btn").performClick()
+        readerMenuItem("nav_history_back_btn").assertIsEnabled()
+        readerMenuItem("nav_history_back_btn").performClick()
         waitForIdle()
         assertEquals(pageAfterStep, repo.currentBook()!!.currentPage)
 
         // Forward button becomes enabled and returns to the jumped location
-        onNodeWithTag("nav_history_forward_btn").assertIsEnabled()
-        onNodeWithTag("nav_history_forward_btn").performClick()
+        readerMenuItem("nav_history_forward_btn").assertIsEnabled()
+        readerMenuItem("nav_history_forward_btn").performClick()
         waitForIdle()
         assertEquals(targetPage, repo.currentBook()!!.currentPage)
     }
@@ -170,7 +170,7 @@ class MeridianFolioUiTest {
         val repo = FolioRepository(persistToDisk = false)
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         // Switch to Settings tab
@@ -204,7 +204,7 @@ class MeridianFolioUiTest {
         repo.selectBook(pdfBook.id)
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         // Selected book is a PDF in Original View: dock should show PDF Original mode toggle instead of reflow font-size A-/A+
@@ -262,7 +262,7 @@ class MeridianFolioUiTest {
         repo.selectBook(pdfBook.id)
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         // Verify Fit & Manual Zoom controls in reader utility bar
@@ -301,7 +301,7 @@ class MeridianFolioUiTest {
         val repo = FolioRepository(persistToDisk = false)
 
         setContent {
-            MeridianFolioApp(repository = repo)
+            MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo)
         }
 
         onNodeWithTag("section_tab_SETTINGS").performClick()

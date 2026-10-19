@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,9 +20,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,9 +40,10 @@ import dev.meridian.folio.core.LibraryFilter
 import dev.meridian.folio.core.LibraryLayout
 import dev.meridian.folio.core.LibraryPreferences
 import dev.meridian.folio.core.LibraryStatus
+import dev.meridian.folio.core.LibrarySort
 import dev.meridian.folio.ui.theme.ClayCard
 import dev.meridian.folio.ui.theme.ClayChip
-import dev.meridian.folio.ui.theme.ClayChromeAction
+import dev.meridian.folio.ui.theme.ClayHeaderAction
 import dev.meridian.folio.ui.theme.ClayPalette
 import dev.meridian.folio.ui.theme.ClayPrimaryButton
 import dev.meridian.folio.ui.theme.ClaySpacing
@@ -57,8 +62,6 @@ private const val LibrarySearchPlaceholder = "Buscar por título o autor…"
 /** Width at which the header switches from one row (title, search, import) to two stacked rows. */
 private val LibraryHeaderRowBreakpoint = 900.dp
 
-/** Height of the quick-filter toolbar card: two chip rows plus the card padding. */
-private val LibraryToolbarCardHeight = 112.dp
 
 /**
  * Content-sized clay card: the clay surface of the library panels.
@@ -112,6 +115,7 @@ internal fun LibraryControls(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LibraryHeader(
     state: FolioPersistedState,
@@ -136,11 +140,11 @@ private fun LibraryHeader(
     }
     val title: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm)) {
+            FlowRow(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm)) {
                 Text(
                     "Tu biblioteca",
                     color = palette.onSurface,
-                    style = typography.headlineLarge,
+                    style = typography.headlineMd,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -169,7 +173,7 @@ private fun LibraryHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 title(Modifier.weight(1f))
-                search(Modifier.widthIn(min = 240.dp, max = 360.dp))
+                search(Modifier.widthIn(min = 320.dp, max = 360.dp))
                 ClayPrimaryButton(LibraryImportLabel, onClick = onTools, tag = "library_tools")
             }
         } else {
@@ -217,7 +221,7 @@ private fun LibraryCountCapsule(palette: ClayPalette, visible: Int, total: Int) 
     }
 }
 
-/** Quick filters (chips), view switcher and the filters/folders/selection controls. */
+/** One compact toolbar; view preferences and sorting live in small menus. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LibraryQuickToolbar(
@@ -232,97 +236,95 @@ private fun LibraryQuickToolbar(
     onFolders: () -> Unit,
     onSelectAll: () -> Unit,
 ) {
-    // The card is explicitly sized (its layers are matchParentSize children): two chip rows of
-    // 40.dp plus the card padding. The rows never wrap past it; where a row can overflow it scrolls.
-    ClayCard(Modifier.fillMaxWidth().heightIn(min = LibraryToolbarCardHeight).testTag("library_toolbar")) {
-        Column(
-            Modifier.fillMaxWidth().padding(ClaySpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val allSelected = filter.statuses.isEmpty() && filter.formats.isEmpty() && filter.collectionId == null
-                ClayChip(
-                    "Todos (${state.documents.size})", allSelected,
-                    onClick = { onFilter(filter.copy(statuses = emptySet(), formats = emptySet(), collectionId = null)) },
-                    tag = "library_quick_status_ALL",
-                )
-                LibraryStatus.entries.forEach { status ->
-                    val count = state.documents.count { it.libraryStatus == status }
-                    if (count == 0) return@forEach
-                    ClayChip(
-                        "${status.label} ($count)",
-                        selected = status in filter.statuses,
-                        onClick = {
-                            onFilter(filter.copy(statuses = if (status in filter.statuses) emptySet() else setOf(status)))
-                        },
-                        tag = "library_quick_status_${status.name}",
-                    )
-                }
-                state.collections.forEach { collection ->
-                    ClayChip(
-                        collection.name,
-                        selected = filter.collectionId == collection.id,
-                        onClick = { onFilter(filter.copy(collectionId = collection.id.takeUnless { it == filter.collectionId })) },
-                        tag = "library_quick_collection_${collection.id}",
-                    )
-                }
-                DocumentFormat.entries.forEach { format ->
-                    ClayChip(
-                        "Formato ${format.name}",
-                        selected = format in filter.formats,
-                        onClick = { onFilter(filter.copy(formats = if (format in filter.formats) filter.formats - format else filter.formats + format)) },
-                        tag = "library_quick_format_${format.name}",
-                    )
+    var showView by remember { mutableStateOf(false) }
+    var showSort by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    val active = filter.activeFacetCount()
+    val counts = remember(state.documents) { state.documents.groupingBy { it.libraryStatus }.eachCount() }
+    val quick: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            ClayHeaderAction("Todos (${state.documents.size})", palette, "library_quick_status_ALL", active == 0, quiet = true) {
+                onFilter(LibraryFilter(search = filter.search))
+            }
+            LibraryStatus.entries.forEach { status ->
+                val count = counts[status] ?: 0
+                if (count > 0) ClayHeaderAction("${status.label} ($count)", palette, "library_quick_status_${status.name}",
+                    status in filter.statuses, quiet = true) {
+                    onFilter(filter.copy(statuses = if (status in filter.statuses) emptySet() else setOf(status)))
                 }
             }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Only the view switcher scrolls; the essential controls below stay pinned so they
-                // remain visible at any width instead of scrolling off-screen.
-                Row(
-                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        Modifier.clip(RoundedCornerShape(percent = 50)).background(palette.surfaceSecondary).padding(3.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        LibraryLayout.entries.forEach { layout ->
-                            ClayChip(
-                                if (layout == LibraryLayout.CARDS) "Pósteres" else "Lista",
-                                selected = prefs.layout == layout,
-                                onClick = { onPreferences(prefs.copy(layout = layout)) },
-                                tag = "library_layout_${layout.name}",
-                            )
-                        }
-                        LibraryDensity.entries.forEach { density ->
-                            ClayChip(
-                                density.label,
-                                selected = prefs.density == density,
-                                onClick = { onPreferences(prefs.copy(density = density)) },
-                                tag = "library_density_${density.name}",
-                            )
-                        }
+            DocumentFormat.entries.forEach { format ->
+                ClayHeaderAction(format.name, palette, "library_quick_format_${format.name}", format in filter.formats, quiet = true) {
+                    onFilter(filter.copy(formats = if (format in filter.formats) filter.formats - format else filter.formats + format))
+                }
+            }
+            state.collections.forEach { collection ->
+                ClayHeaderAction(collection.name, palette, "library_quick_collection_${collection.id}", filter.collectionId == collection.id, quiet = true) {
+                    onFilter(filter.copy(collectionId = collection.id.takeUnless { it == filter.collectionId }))
+                }
+            }
+        }
+    }
+    val actions: @Composable () -> Unit = {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ClayHeaderAction(if (active == 0) "Filtros" else "Filtros · $active", palette, "library_filters_btn", filtersOpen || active > 0,
+                onClick = onFilters)
+            Box {
+                ClayHeaderAction(if (prefs.layout == LibraryLayout.CARDS) "▦  Pósteres" else "☰  Lista", palette, "library_view_menu", showView) { showView = true }
+                DropdownMenu(showView, { showView = false }) {
+                    LibraryLayout.entries.forEach { layout ->
+                        DropdownMenuItem(text = { Text((if (layout == prefs.layout) "✓  " else "") + if (layout == LibraryLayout.CARDS) "Pósteres" else "Lista") },
+                            modifier = Modifier.testTag("library_layout_${layout.name}"),
+                            onClick = { showView = false; onPreferences(prefs.copy(layout = layout)) })
+                    }
+                    HorizontalDivider()
+                    LibraryDensity.entries.forEach { density ->
+                        DropdownMenuItem(text = { Text((if (density == prefs.density) "✓  " else "") + density.label) },
+                            modifier = Modifier.testTag("library_density_${density.name}"),
+                            onClick = { showView = false; onPreferences(prefs.copy(density = density)) })
                     }
                 }
-                ClayChromeAction(
-                    "Filtros y orden " + if (filtersOpen) "▴" else "▾",
-                    palette,
-                    "library_filters_btn",
-                    selected = filtersOpen,
-                    onClick = onFilters,
-                )
-                ClayChromeAction("Carpetas", palette, "library_folders", onClick = onFolders)
-                ClayChromeAction("Seleccionar", palette, "library_select_all", onClick = onSelectAll)
+            }
+            Box {
+                ClayHeaderAction("${prefs.sort.label} ${if (prefs.descending) "↓" else "↑"}", palette, "library_sort_menu", showSort,
+                    description = "Ordenar biblioteca") { showSort = true }
+                DropdownMenu(showSort, { showSort = false }) {
+                    LibrarySort.entries.forEach { sort ->
+                        DropdownMenuItem(text = { Text((if (sort == prefs.sort) "✓  " else "") + sort.label) },
+                            modifier = Modifier.testTag("library_sort_${sort.name}"),
+                            onClick = { showSort = false; onPreferences(prefs.copy(sort = sort)) })
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(if (prefs.descending) "Descendente ↓" else "Ascendente ↑") },
+                        modifier = Modifier.testTag("library_sort_direction"),
+                        onClick = { showSort = false; onPreferences(prefs.copy(descending = !prefs.descending)) })
+                }
+            }
+            Box {
+                ClayHeaderAction("⋯", palette, "library_more_menu", showMore, description = "Más opciones de biblioteca") { showMore = true }
+                DropdownMenu(showMore, { showMore = false }) {
+                    DropdownMenuItem(text = { Text("Carpetas vigiladas") }, modifier = Modifier.testTag("library_folders"),
+                        onClick = { showMore = false; onFolders() })
+                    DropdownMenuItem(text = { Text("Seleccionar todos") }, modifier = Modifier.testTag("library_select_all"),
+                        onClick = { showMore = false; onSelectAll() })
+                }
+            }
+        }
+    }
+    ClayContentCard(Modifier.fillMaxWidth().testTag("library_toolbar")) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(8.dp)) {
+            if (maxWidth >= 760.dp) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    quick(Modifier.weight(1f))
+                    actions()
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    quick(Modifier.fillMaxWidth())
+                    actions()
+                }
             }
         }
     }

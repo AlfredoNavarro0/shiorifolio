@@ -141,7 +141,7 @@ internal fun LibraryWorkspace(
         }
         LazyVerticalGrid(
             columns = if (prefs.layout == LibraryLayout.LIST) GridCells.Fixed(1)
-            else GridCells.Adaptive(if (prefs.density == LibraryDensity.COMPACT) 140.dp else 165.dp),
+            else GridCells.Adaptive(if (prefs.density == LibraryDensity.COMPACT) 240.dp else 280.dp),
             horizontalArrangement = Arrangement.spacedBy(ClaySpacing.md), verticalArrangement = Arrangement.spacedBy(ClaySpacing.lg),
             contentPadding = PaddingValues(horizontal = ClaySpacing.xs, vertical = ClaySpacing.xs),
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("library_books"),
@@ -152,9 +152,6 @@ internal fun LibraryWorkspace(
                     onTools = { showTools = !showTools }, onFolders = { showFolders = !showFolders },
                     onFilters = { showFilters = !showFilters }, filtersOpen = showFilters,
                     onSelectAll = { selected = selected + books.map { it.id } })
-            }
-            if (showFilters) item(span = { GridItemSpan(maxLineSpan) }) {
-                LibraryFilters(repository, palette, filter, { filter = it }, onClose = { showFilters = false })
             }
             if (showFolders) item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryFolders(repository, palette, onPickFolder)
@@ -199,6 +196,7 @@ internal fun LibraryWorkspace(
             }
         }
     }
+    if (showFilters) LibraryFilters(repository, palette, filter, { filter = it }, onClose = { showFilters = false })
     metadataBook?.let { book ->
         BookMetadataDialog(
             palette = palette,
@@ -314,138 +312,6 @@ private fun LibrarySelectionBar(repository: FolioRepository, palette: ClayPalett
             LibraryAction("Cancelar selección", "library_clear_selection") { onClear() }
         }
     }
-}
-
-/** Group caption of the filter panel (uppercase tracking, muted ink). */
-@Composable
-private fun FilterGroupLabel(text: String, palette: ClayPalette) {
-    Text(
-        text.uppercase(), color = palette.textMuted, style = LocalClayTypography.current.labelSm,
-        modifier = Modifier.padding(top = ClaySpacing.xs),
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun LibraryFilters(
-    repository: FolioRepository,
-    palette: ClayPalette,
-    filter: LibraryFilter,
-    onChange: (LibraryFilter) -> Unit,
-    onClose: () -> Unit,
-) {
-    val state by repository.state.collectAsState()
-    var collectionName by remember { mutableStateOf("") }
-    val typography = LocalClayTypography.current
-    ClayContentCard(Modifier.fillMaxWidth().testTag("library_filter_panel")) {
-        Column(Modifier.fillMaxWidth().padding(ClaySpacing.md), verticalArrangement = Arrangement.spacedBy(ClaySpacing.sm)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Filtros combinables", color = palette.onSurface, style = typography.titleMd)
-                Row(horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                    LibraryAction("Limpiar", "library_reset_filters") { onChange(LibraryFilter()) }
-                    LibraryAction("Aplicar", selected = true) { onClose() }
-                }
-            }
-            FilterGroupLabel("Estado de lectura", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LibraryStatus.entries.forEach { status ->
-                    LibraryAction(status.label, "library_filter_status_${status.name}", status in filter.statuses) {
-                        onChange(filter.copy(statuses = if (status in filter.statuses) filter.statuses - status else filter.statuses + status))
-                    }
-                }
-            }
-            FilterGroupLabel("Formato de archivo", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                DocumentFormat.entries.forEach { format ->
-                    LibraryAction(format.name, "library_filter_format_${format.name}", format in filter.formats) {
-                        onChange(filter.copy(formats = if (format in filter.formats) filter.formats - format else filter.formats + format))
-                    }
-                }
-            }
-            FilterGroupLabel("Rango de porcentaje · ${filter.minProgress}% - ${filter.maxProgress}%", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LibraryNumberField("Progreso mínimo %", filter.minProgress, "library_min_progress", palette) { onChange(filter.copy(minProgress = it.coerceIn(0, 100))) }
-                LibraryNumberField("Progreso máximo %", filter.maxProgress, "library_max_progress", palette) { onChange(filter.copy(maxProgress = it.coerceIn(0, 100))) }
-            }
-            FilterGroupLabel("Cantidad de páginas", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LibraryNumberField("Páginas mínimas", filter.minPages, "library_min_pages", palette) { onChange(filter.copy(minPages = it)) }
-                LibraryNumberField("Páginas máximas", filter.maxPages, "library_max_pages", palette) { onChange(filter.copy(maxPages = it)) }
-            }
-            FilterGroupLabel("Fechas", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LibraryDateField("Añadido desde", "library_added_from", filter.addedAfterMs, palette) { onChange(filter.copy(addedAfterMs = it)) }
-                LibraryDateField("Añadido hasta", "library_added_to", filter.addedBeforeMs, palette, endOfDay = true) { onChange(filter.copy(addedBeforeMs = it)) }
-                LibraryDateField("Finalizado desde", "library_finished_from", filter.completedAfterMs, palette) { onChange(filter.copy(completedAfterMs = it)) }
-                LibraryDateField("Finalizado hasta", "library_finished_to", filter.completedBeforeMs, palette, endOfDay = true) { onChange(filter.copy(completedBeforeMs = it)) }
-            }
-            FilterGroupLabel("Ordenar por", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LibrarySort.entries.forEach { sort ->
-                    LibraryAction(sort.label, "library_sort_${sort.name}", state.libraryPreferences.sort == sort) {
-                        repository.library.setPreferences(state.libraryPreferences.copy(sort = sort))
-                    }
-                }
-                LibraryAction(if (state.libraryPreferences.descending) "Descendente ↓" else "Ascendente ↑", "library_sort_direction") {
-                    repository.library.setPreferences(state.libraryPreferences.copy(descending = !state.libraryPreferences.descending))
-                }
-            }
-            FilterGroupLabel("Colecciones", palette)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LibraryAction("Todas", "library_collection_all", filter.collectionId == null) { onChange(filter.copy(collectionId = null)) }
-                state.collections.forEach { collection ->
-                    LibraryAction(collection.name, "library_collection_${collection.id}", filter.collectionId == collection.id) { onChange(filter.copy(collectionId = collection.id)) }
-                    LibraryAction("Eliminar colección ${collection.name}", "library_remove_collection_${collection.id}") {
-                        repository.library.removeCollection(collection.id)
-                        if (filter.collectionId == collection.id) onChange(filter.copy(collectionId = null))
-                    }
-                }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    collectionName, { collectionName = it },
-                    label = { Text("Nueva colección") }, singleLine = true,
-                    colors = clayTextFieldColors(palette),
-                    modifier = Modifier.width(260.dp).shioriTextFieldFocusGuard().testTag("library_collection_name"),
-                )
-                LibraryAction("Crear colección", "library_create_collection", enabled = collectionName.isNotBlank()) {
-                    repository.library.createCollection(collectionName); collectionName = ""
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LibraryNumberField(label: String, value: Int, tag: String, palette: ClayPalette, onChange: (Int) -> Unit) {
-    var draft by remember(value) { mutableStateOf(if (value == Int.MAX_VALUE) "" else value.toString()) }
-    OutlinedTextField(
-        draft, { input ->
-            if (input.all { it.isDigit() }) {
-                draft = input
-                onChange(input.toIntOrNull() ?: if (tag.contains("max_pages")) Int.MAX_VALUE else 0)
-            }
-        },
-        label = { Text(label) }, singleLine = true, colors = clayTextFieldColors(palette),
-        modifier = Modifier.width(190.dp).shioriTextFieldFocusGuard().testTag(tag),
-    )
-}
-
-@Composable
-private fun LibraryDateField(label: String, tag: String, value: Long?, palette: ClayPalette, endOfDay: Boolean = false, onChange: (Long?) -> Unit) {
-    var draft by remember { mutableStateOf("") }
-    LaunchedEffect(value) { if (value == null) draft = "" }
-    val day = runCatching { LocalDate.parse(draft).toEpochDays() * 86_400_000L }.getOrNull()
-    OutlinedTextField(
-        draft, {
-            draft = it
-            val parsed = runCatching { LocalDate.parse(it).toEpochDays() * 86_400_000L }.getOrNull()
-            if (it.isBlank() || parsed != null) onChange(parsed?.let { ms -> ms + if (endOfDay) 86_399_999 else 0 })
-        },
-        label = { Text("$label · AAAA-MM-DD") }, isError = draft.isNotEmpty() && day == null,
-        singleLine = true, colors = clayTextFieldColors(palette),
-        modifier = Modifier.width(250.dp).shioriTextFieldFocusGuard().testTag(tag),
-    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -566,8 +432,8 @@ private fun LibraryBookItem(book: BookDocument, telemetry: BookReadingTelemetry?
                     modifier = Modifier.testTag("library_select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" },
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(book.title, color = palette.onSurface, style = typography.titleMd, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(book.author, color = palette.onSurfaceVariant, style = typography.bodySm, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(book.title, color = palette.onSurface, style = typography.titleMd)
+                    Text(book.author, color = palette.onSurfaceVariant, style = typography.bodySm)
                     if (book.isMissingOnDisk) Text(
                         "No disponible en disco", color = palette.warningAmber, style = typography.bodySm,
                         modifier = Modifier.testTag("library_missing_${book.id}"),
@@ -623,22 +489,20 @@ internal fun LibraryCover(book: BookDocument, palette: ClayPalette) {
     }
     Box(Modifier.fillMaxSize().background(palette.surfaceSecondary), contentAlignment = Alignment.Center) {
         val image = bitmap
-        if (image != null) Image(image, "Portada de ${book.title}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        if (image != null) Image(image, "Portada de ${book.title}", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
         else Column(
             Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
                 listOf(palette.primary.copy(alpha = 0.15f), palette.surfaceContainerLowest, palette.surfaceSecondary)))
-                .padding(horizontal = 22.dp, vertical = 48.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.Center,
         ) {
             Text(book.format.name + " /", color = palette.primary, fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             Spacer(Modifier.height(18.dp))
             Text(book.title, color = palette.onSurface, fontFamily = FontFamily.Serif, fontSize = 21.sp,
-                lineHeight = 27.sp, fontWeight = FontWeight.Medium, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                lineHeight = 27.sp, fontWeight = FontWeight.Medium, maxLines = 4, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(18.dp))
             HorizontalDivider(Modifier.width(32.dp), color = palette.primary, thickness = 2.dp)
-            Spacer(Modifier.height(12.dp))
-            Text(book.author, color = palette.onSurfaceVariant, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -30,9 +31,53 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.meridian.folio.core.ReaderTheme
 
+/** Soft pill for the application header: rounded, lightly raised, without a hard outline. */
+@Composable
+fun ClayHeaderAction(
+    label: String,
+    palette: ClayPalette,
+    tag: String,
+    selected: Boolean = false,
+    quiet: Boolean = false,
+    description: String = label,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(percent = 50)
+    Box(contentAlignment = Alignment.Center) {
+        if (!quiet || selected) {
+            ClayShadowBox(
+                shadow = if (selected) ClayShadows.button else ClayShadows.card,
+                shape = shape, modifier = Modifier.matchParentSize(),
+            ) {
+                Box(Modifier.matchParentSize().background(when {
+                    selected && quiet -> palette.primary
+                    selected -> palette.primaryContainer
+                    else -> palette.surfaceContainerLow
+                }, shape))
+            }
+        }
+        Box(
+            Modifier.heightIn(min = 40.dp).widthIn(min = 40.dp)
+                .clayFocusableClickable(palette, shape, onClick = onClick)
+                .testTag(tag).semantics { contentDescription = description }
+                .padding(horizontal = ClaySpacing.sm),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, color = when {
+                selected && quiet -> palette.onPrimary
+                selected -> palette.onPrimaryContainer
+                else -> palette.onSurfaceVariant
+            },
+                style = LocalClayTypography.current.labelMd,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1, softWrap = false)
+        }
+    }
+}
+
 /**
- * Frosted clay card: multi-layer clay shadow ([ClayShadows.card]) around a translucent
- * `cardSurface` layer with blur ([Modifier.clayFrosted]) and a 28.dp radius.
+ * Soft clay card: multi-layer clay shadow ([ClayShadows.card]) around an opaque
+ * `cardSurface` fill and the shared card radius.
  *
  * The card is sized by its caller: the shadow and frosted layers are `matchParentSize`,
  * so pass explicit constraints (e.g. `Modifier.fillMaxWidth()` plus a height) — with
@@ -44,7 +89,7 @@ fun ClayCard(
     palette: ClayPalette = LocalClayPalette.current,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(ClayRadius.md)
     ClayShadowBox(shadow = ClayShadows.card, shape = shape, modifier = modifier) {
         Box(Modifier.matchParentSize().clayFrosted(shape, surface = palette.cardSurface))
         content()
@@ -53,7 +98,7 @@ fun ClayCard(
 
 /**
  * Primary action button: `primary → primaryDeep` gradient, white label, clay button
- * shadow ([ClayShadows.button]), 20.dp radius and a minimum height of 48.dp.
+ * shadow ([ClayShadows.button]), shared button radius and a minimum height of 48.dp.
  *
  * The label drives the intrinsic size: the surface is a sibling above the shadow box
  * (whose layers are `matchParentSize` and therefore cannot wrap content).
@@ -67,7 +112,7 @@ fun ClayPrimaryButton(
     enabled: Boolean = true,
     palette: ClayPalette = LocalClayPalette.current,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(ClayRadius.base)
     val background: Brush = if (enabled) {
         Brush.horizontalGradient(listOf(palette.primary, palette.primaryDeep))
     } else {
@@ -83,6 +128,7 @@ fun ClayPrimaryButton(
         }
         Box(
             Modifier
+                .heightIn(min = 48.dp)
                 .clip(shape)
                 .background(background)
                 // The opaque gradient hides the shadow box's behind-content inset
@@ -106,7 +152,7 @@ fun ClayPrimaryButton(
 
 /**
  * Secondary action button: quiet `surfaceSecondary` surface with a subtle border,
- * 20.dp radius and a minimum height of 48.dp.
+ * shared button radius and a minimum height of 48.dp.
  */
 @Composable
 fun ClaySecondaryButton(
@@ -117,7 +163,7 @@ fun ClaySecondaryButton(
     enabled: Boolean = true,
     palette: ClayPalette = LocalClayPalette.current,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(ClayRadius.base)
     Box(
         modifier
             .heightIn(min = 48.dp)
@@ -139,19 +185,8 @@ fun ClaySecondaryButton(
     }
 }
 
-/**
- * Quiet chrome action pill (top nav, toolbars): fully rounded, minimum height 40.dp;
- * `primary`/`onPrimary` when [selected], otherwise `surfaceContainerHigh`/`onSurface`
- * with a subtle border. The label font follows [LocalClayUiAppearance].
- *
- * The positional signature mirrors the retired `ModernChromeAction` (f0edce9), so call
- * sites are a pure rename. Behavior parity with it: min height 40.dp, horizontal 12.dp /
- * vertical 10.dp padding, font size `appearance.fontSizeSp.coerceIn(11f, 15f).sp`,
- * weight from the appearance (SemiBold when selected), `testTag` + `contentDescription`.
- * Deliberate deviations (clay redesign): fully-rounded pill instead of 12.dp corners,
- * `primary`/`onPrimary` when selected instead of the old accent/transparent pair,
- * opaque `surfaceContainerHigh` with a subtle border when not selected, and a
- * `clayFocusableClickable` focus ring instead of `Surface`.
+/** Compact toolbar action with a soft rectangular outline and a solid selected accent.
+ * Keeps a 40.dp target, the user typography settings, tags and accessible description.
  */
 @Composable
 fun ClayChromeAction(
@@ -164,7 +199,7 @@ fun ClayChromeAction(
     onClick: () -> Unit,
 ) {
     val appearance = LocalClayUiAppearance.current
-    val shape = RoundedCornerShape(percent = 50)
+    val shape = RoundedCornerShape(ClayRadius.sm)
     val contentColor = when {
         !enabled -> palette.disabledContent
         selected -> palette.onPrimary
@@ -174,7 +209,7 @@ fun ClayChromeAction(
         Modifier
             .heightIn(min = 40.dp)
             .clip(shape)
-            .background(if (selected) palette.primary else palette.surfaceContainerHigh)
+            .background(if (selected) palette.primary else palette.surfaceContainerLow)
             .then(
                 if (selected) {
                     Modifier
@@ -201,7 +236,7 @@ fun ClayChromeAction(
 }
 
 /**
- * Selectable filter chip: pill with `primary`/`onPrimary` when [selected], otherwise
+ * Selectable filter chip: soft rectangle with `primary`/`onPrimary` when [selected], otherwise
  * `surfaceContainerHigh`/`onSurface` with a subtle border.
  */
 @Composable
@@ -214,7 +249,7 @@ fun ClayChip(
     enabled: Boolean = true,
     palette: ClayPalette = LocalClayPalette.current,
 ) {
-    val shape = RoundedCornerShape(percent = 50)
+    val shape = RoundedCornerShape(ClayRadius.sm)
     val contentColor = when {
         !enabled -> palette.disabledContent
         selected -> palette.onPrimary
@@ -224,7 +259,7 @@ fun ClayChip(
         modifier
             .heightIn(min = 40.dp)
             .clip(shape)
-            .background(if (selected) palette.primary else palette.surfaceContainerHigh)
+            .background(if (selected) palette.primary else palette.surfaceContainerLow)
             .then(
                 if (selected) {
                     Modifier
@@ -262,14 +297,14 @@ fun ClaySegmentedTabs(
 ) {
     Row(
         modifier
-            .clip(RoundedCornerShape(percent = 50))
+            .clip(RoundedCornerShape(ClayRadius.sm))
             .background(palette.surfaceSecondary)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         items.forEachIndexed { index, item ->
             val selected = index == selectedIndex
-            val itemShape = RoundedCornerShape(percent = 50)
+            val itemShape = RoundedCornerShape(ClayRadius.sm)
             Box(
                 Modifier
                     .weight(1f)
@@ -306,7 +341,7 @@ fun ClayProgressBar(
     tag: String? = null,
     palette: ClayPalette = LocalClayPalette.current,
 ) {
-    val shape = RoundedCornerShape(percent = 50)
+    val shape = RoundedCornerShape(ClayRadius.sm)
     Box(
         modifier
             .fillMaxWidth()

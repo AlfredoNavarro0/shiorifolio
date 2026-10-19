@@ -16,23 +16,22 @@ import kotlin.test.assertTrue
 class ClayTokensTest {
 
     @Test
-    fun paletteHasExactDesignMdHexValues() {
+    fun paletteUsesQuietChromeAndOpaqueCards() {
         val palette = ClayPalette()
-        assertEquals(Color(0xFFF4F1FA), palette.canvas)
-        assertEquals(Color(0xFFFEF7FF), palette.surface)
-        assertEquals(Color(0xFF7C3AED), palette.primary)
+        assertEquals(Color(0xFFF5F4F8), palette.canvas)
+        assertEquals(Color(0xFFFCFBFE), palette.surface)
+        assertEquals(Color(0xFF7354C8), palette.primary)
         assertEquals(Color(0xFF332F3A), palette.onSurface)
         assertEquals(Color(0xFF635F69), palette.textMuted)
-        assertEquals(Color(0xFFCCC3D8), palette.outlineVariant)
+        assertEquals(Color(0xFFDED9E7), palette.outlineVariant)
         assertEquals(Color(0xFF10B981), palette.successMint)
         assertEquals(Color(0xFFBA1A1A), palette.error)
-        // Compose packs alpha as 8-bit: 0.75 -> 191/255 = 0.7490196.
-        assertEquals(0.75f, palette.cardSurface.alpha, 1f / 255f)
+        assertEquals(1f, palette.cardSurface.alpha)
         assertFalse(palette.isDarkReading)
     }
 
     @Test
-    fun spacingAndRadiusScalesMatchDesignMd() {
+    fun spacingAndRadiusScalesKeepCompactSoftCorners() {
         assertEquals(8.dp, ClaySpacing.xs)
         assertEquals(12.dp, ClaySpacing.sm)
         assertEquals(16.dp, ClaySpacing.md)
@@ -42,10 +41,10 @@ class ClayTokensTest {
         assertEquals(32.dp, ClaySpacing.gutterDesktop)
         assertEquals(48.dp, ClaySpacing.marginDesktop)
         assertEquals(8.dp, ClayRadius.sm)
-        assertEquals(16.dp, ClayRadius.base)
-        assertEquals(24.dp, ClayRadius.md)
-        assertEquals(32.dp, ClayRadius.lg)
-        assertEquals(48.dp, ClayRadius.xl)
+        assertEquals(12.dp, ClayRadius.base)
+        assertEquals(20.dp, ClayRadius.md)
+        assertEquals(24.dp, ClayRadius.lg)
+        assertEquals(32.dp, ClayRadius.xl)
     }
 
     @Test
@@ -59,99 +58,18 @@ class ClayTokensTest {
     }
 
     @Test
-    fun cardShadowStackHasLiteralDesignMdLayers() {
-        val card = ClayShadows.card
-        assertEquals(2, card.outer.size)
-        assertEquals(2, card.inner.size)
-        with(card.outer[0]) {
-            assertEquals(16.dp, dx)
-            assertEquals(16.dp, dy)
-            assertEquals(32.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0x38A096B4), color)
+    fun shadowsStaySubtleAndPressedSurfacesHaveNoDropShadow() {
+        for (stack in listOf(ClayShadows.card, ClayShadows.button, ClayShadows.floating)) {
+            assertTrue(stack.outer.isNotEmpty())
+            for (layer in stack.outer) {
+                assertTrue(layer.color.alpha <= 0.15f, "Drop shadows should not compete with content")
+                assertTrue(layer.dy.value in 0f..6f, "Avoid detached offset blocks")
+                assertTrue(layer.blur.value > layer.dy.value, "Depth must have a feathered edge")
+            }
         }
-        with(card.outer[1]) {
-            assertEquals((-10).dp, dx)
-            assertEquals((-10).dp, dy)
-            assertEquals(24.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0xF2FFFFFF), color)
-        }
-        with(card.inner[0]) {
-            assertEquals(6.dp, dx)
-            assertEquals(6.dp, dy)
-            assertEquals(12.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0x0A8B5CF6), color)
-        }
-        with(card.inner[1]) {
-            assertEquals((-6).dp, dx)
-            assertEquals((-6).dp, dy)
-            assertEquals(12.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0xFFFFFFFF), color)
-        }
-        // Pressed is purely recessed: no outer drop layers.
         assertTrue(ClayShadows.pressed.outer.isEmpty())
-        assertEquals(2, ClayShadows.pressed.inner.size)
-    }
-
-    @Test
-    fun buttonShadowStackHasLiteralDesignMdLayers() {
-        val button = ClayShadows.button
-        assertEquals(2, button.outer.size)
-        assertEquals(2, button.inner.size)
-        with(button.outer[0]) {
-            assertEquals(10.dp, dx)
-            assertEquals(10.dp, dy)
-            assertEquals(20.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0x477C3AED), color)
-        }
-        with(button.outer[1]) {
-            assertEquals((-6).dp, dx)
-            assertEquals((-6).dp, dy)
-            assertEquals(14.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0xB3FFFFFF), color)
-        }
-        with(button.inner[0]) {
-            assertEquals(3.dp, dx)
-            assertEquals(3.dp, dy)
-            assertEquals(6.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0x66FFFFFF), color)
-        }
-        with(button.inner[1]) {
-            assertEquals((-3).dp, dx)
-            assertEquals((-3).dp, dy)
-            assertEquals(6.dp, blur)
-            assertEquals(0.dp, spread)
-            assertEquals(Color(0x1F000000), color)
-        }
-    }
-
-    @Test
-    fun floatingShadowStackCarriesLiteralDesignMdLayersAndSpread() {
-        val floating = ClayShadows.floating
-        assertTrue(floating.inner.isEmpty())
-        assertEquals(2, floating.outer.size)
-        // 0 20px 35px -8px rgba(124,58,237,0.2)
-        with(floating.outer[0]) {
-            assertEquals(0.dp, dx)
-            assertEquals(20.dp, dy)
-            assertEquals(35.dp, blur)
-            assertEquals((-8).dp, spread)
-            assertEquals(Color(0x337C3AED), color)
-        }
-        // 0 10px 15px -5px rgba(0,0,0,0.04)
-        with(floating.outer[1]) {
-            assertEquals(0.dp, dx)
-            assertEquals(10.dp, dy)
-            assertEquals(15.dp, blur)
-            assertEquals((-5).dp, spread)
-            assertEquals(Color(0x0A000000), color)
-        }
+        assertTrue(ClayShadows.pressed.inner.isNotEmpty())
+        assertTrue(ClayShadows.floating.inner.isEmpty())
     }
 
     @Test
@@ -198,18 +116,25 @@ class ClayTokensTest {
 
     @Test
     fun keyColorPairsMeetWcagContrastRatio() {
-        val palette = ClayPalette()
-        val pairs = listOf(
-            palette.onSurface to palette.canvas,
-            palette.onSurfaceVariant to palette.surfaceContainerLow,
-            palette.textMuted to palette.canvas,
-            palette.onPrimary to palette.primary,
-            palette.onWarningAmber to palette.warningAmber,
-            palette.onSuccessMint to palette.successMint,
-        )
-        for ((foreground, background) in pairs) {
-            val ratio = contrastRatio(foreground, background)
-            assertTrue(ratio >= 4.5, "Contrast ${ratio} between $foreground and $background should be >= 4.5")
+        for (theme in ReaderTheme.entries) {
+            for (highContrast in listOf(false, true)) {
+                val palette = ClayTokens.chrome(highContrast, theme)
+                val pairs = listOf(
+                    palette.onSurface to palette.canvas,
+                    palette.onSurfaceVariant to palette.surfaceContainerLow,
+                    palette.textMuted to palette.canvas,
+                    palette.onSurface to palette.cardSurface,
+                    palette.onSurfaceVariant to palette.surfaceContainerHigh,
+                    palette.onPrimaryContainer to palette.primaryContainer,
+                    palette.onPrimary to palette.primary,
+                    palette.onWarningAmber to palette.warningAmber,
+                    palette.onSuccessMint to palette.successMint,
+                )
+                for ((foreground, background) in pairs) {
+                    val ratio = contrastRatio(foreground, background)
+                    assertTrue(ratio >= 4.5, "$theme contrast $ratio between $foreground and $background should be >= 4.5")
+                }
+            }
         }
     }
 

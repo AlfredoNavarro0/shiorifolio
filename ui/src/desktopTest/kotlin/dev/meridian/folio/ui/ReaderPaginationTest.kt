@@ -47,7 +47,7 @@ class ReaderPaginationTest {
         repo.setViewMode(PageViewMode.ONE_COLUMN)
         repo.goToPage(book.id, 1)
         repo.updatePageContent(book.id, 1, "Prueba de paginación", listOf(ContentBlock("long", text = "Palabras de una página extensa. ".repeat(250))))
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         fun part() = onNodeWithTag("page_part_1").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].first().text
         val count = part().substringAfterLast('/').toInt()
         assertTrue(count > 1)
@@ -72,7 +72,7 @@ class ReaderPaginationTest {
     @Test
     fun settingsShowOnlySelectedCategoryAndRemainUsableInBothThemes() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_SETTINGS").performClick()
         for (theme in listOf(ReaderTheme.WHITE, ReaderTheme.DARK)) {
             repo.setTheme(theme)

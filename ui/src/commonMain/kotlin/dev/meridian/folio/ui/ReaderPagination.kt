@@ -2,8 +2,9 @@ package dev.meridian.folio.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -50,6 +51,11 @@ internal class ReaderPagination {
         }
 
     fun turn(book: BookDocument, step: Int, direction: Int, onSourcePage: (Int) -> Unit) {
+        if (book.format == DocumentFormat.PDF) {
+            val target = (book.currentPage + direction * step).coerceIn(1, book.totalPages)
+            if (target != book.currentPage) onSourcePage(target)
+            return
+        }
         val pages = (book.currentPage until book.currentPage + step).toList()
         val ordered = if (direction > 0) pages else pages.reversed()
         val leaf = ordered.mapNotNull { leaves[it] }.firstOrNull {
@@ -144,6 +150,22 @@ internal fun PagedBookBody(
     onQuickSavePhrase: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (book.format == DocumentFormat.PDF) {
+        key(book.id, page.pageNumber) {
+            ReaderTextSelection(book.id to page.pageNumber, page.pageNumber, modifier.fillMaxSize().testTag("paged_body_${page.pageNumber}")) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(typography.paragraphSpacingDp.dp)) {
+                    page.blocks.forEach { block ->
+                        ReflowBlockItemView(tone, pdfPageColorMode, book,
+                            ReflowedBlockItem(block.id, page.pageNumber, page.chapterTitle, block.style, block.text, block.imagePath),
+                            savedPhrases, typography.fontFamily.toComposeFontFamily(), typography.textAlignment.toComposeTextAlign(),
+                            fontSizeSp, lineHeightSp, false, {}, onQuickSavePhrase)
+                    }
+                }
+            }
+        }
+        return
+    }
     val pagination = LocalReaderPagination.current
     val leaf = remember(book.id, page.pageNumber) { LeafPagination() }
     DisposableEffect(pagination, page.pageNumber, leaf) {
@@ -199,7 +221,7 @@ internal fun PagedBookBody(
             leaf.enterAtEnd = false
         }
         Column(Modifier.fillMaxSize()) {
-            SelectionContainer(Modifier.weight(1f).fillMaxWidth()) {
+            ReaderTextSelection(Triple(book.id, page.pageNumber, index), page.pageNumber, Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(typography.paragraphSpacingDp.dp)) {
                     pages[index].forEach { piece ->
                         val path = piece.imagePath
@@ -220,17 +242,13 @@ internal fun PagedBookBody(
                                     contentScale = ContentScale.Fit,
                                     colorFilter = pdfPageImageColorFilter(tone, pdfPageColorMode, book.format == DocumentFormat.PDF, false))
                             }
-                        } else Text(piece.text, style = piece.style, modifier = Modifier.fillMaxWidth())
+                        } else Text(piece.text.withReaderSource(page.pageNumber, page.plainText), style = piece.style, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
             Row(Modifier.fillMaxWidth().height(30.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (pages.size > 1) "Página ${page.pageNumber} · ${index + 1}/${pages.size}" else "",
                     color = tone.muted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
-                val text = pages[index].joinToString(" ") { it.text.text }
-                val candidate = remember(text) { extractCandidatePhrases(text).firstOrNull() }
-                if (candidate != null) Text("+ Frase", color = tone.accent, fontSize = 11.sp,
-                    modifier = Modifier.clayFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
             }
         }
     }

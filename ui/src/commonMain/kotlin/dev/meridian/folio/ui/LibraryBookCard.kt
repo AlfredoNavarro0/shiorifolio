@@ -47,8 +47,7 @@ import dev.meridian.folio.core.LibraryStatus
 import dev.meridian.folio.core.PageReminder
 import dev.meridian.folio.core.ReadingPredictionEngine
 import dev.meridian.folio.core.libraryProgress
-import dev.meridian.folio.ui.theme.ClayCard
-import dev.meridian.folio.ui.theme.ClayChromeAction
+import dev.meridian.folio.ui.theme.ClayHeaderAction
 import dev.meridian.folio.ui.theme.ClayPalette
 import dev.meridian.folio.ui.theme.ClayProgressBar
 import dev.meridian.folio.ui.theme.ClayRadius
@@ -58,13 +57,6 @@ import kotlin.math.roundToInt
 
 /** Poster ratio of the card cover: height = width × 1.5 (the Stitch 3:4-ish poster block). */
 private const val BookCoverRatio = 1.5f
-
-/**
- * Height of the card chrome below the poster: title (2 lines), author, the optional pace line and
- * the status band with its progress track. The card height is derived from the poster, so this
- * value only has to leave room for the text block.
- */
-private val BookCardChromeHeight = 176.dp
 
 /**
  * Cover-led shelf card: poster with the format badge and the page count, title/author, the reading
@@ -102,83 +94,33 @@ internal fun LibraryBookCard(
     val lift by animateFloatAsState(if (hovered || focused) -4f else 0f, tween(220))
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val coverHeight = (maxWidth - ClaySpacing.md * 2).coerceAtLeast(ClaySpacing.xl) * BookCoverRatio
-        ClayCard(
-            Modifier.fillMaxWidth()
-                .height(coverHeight + BookCardChromeHeight)
-                .graphicsLayer { translationY = lift * density }
-                .testTag("library_book_${book.id}"),
+        val coverHeight = ((maxWidth - ClaySpacing.md * 2) * BookCoverRatio).coerceAtMost(300.dp)
+        ClayContentCard(
+            Modifier.fillMaxWidth().graphicsLayer { translationY = lift * density }.testTag("library_book_${book.id}"),
         ) {
-            Column(
-                Modifier.fillMaxSize().padding(ClaySpacing.md),
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.fillMaxWidth()) {
-                    Box(
-                        Modifier.fillMaxWidth().height(coverHeight).clip(coverShape)
-                            .border(
-                                width = if (selected) 2.dp else 1.dp,
-                                color = when {
-                                    focused -> palette.focusRing
-                                    selected -> palette.primary
-                                    else -> palette.outlineVariant.copy(alpha = 0.65f)
-                                },
-                                shape = coverShape,
-                            )
-                            .clickable(
-                                interactionSource = interactions,
-                                indication = null,
-                                onClickLabel = if (selectionMode) "Seleccionar ${book.title}" else "Leer ${book.title}",
-                            ) { if (selectionMode) onToggleSelection() else onOpen() }
-                            .testTag("library_open_${book.id}"),
-                    ) {
-                        LibraryCover(book, palette)
-                        if (selectionMode || hovered) {
-                            Checkbox(
-                                selected, { onToggleSelection() },
-                                modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
-                                    .clip(RoundedCornerShape(ClayRadius.sm))
-                                    .background(palette.surfaceContainerLowest.copy(alpha = 0.94f))
-                                    .testTag("library_select_${book.id}")
-                                    .semantics { contentDescription = "Seleccionar ${book.title}" },
-                            )
-                        } else {
-                            LibraryFormatBadge(book, palette, Modifier.align(Alignment.TopStart).padding(ClaySpacing.xs))
-                        }
-                        LibraryPagePill(book, palette, Modifier.align(Alignment.TopEnd).padding(ClaySpacing.xs))
-                        if (hovered && !selectionMode) Box(
-                            Modifier.fillMaxSize().background(palette.spineShadow.copy(alpha = 0.25f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                Modifier.clip(RoundedCornerShape(percent = 50)).background(palette.surfaceContainerLowest)
-                                    .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.sm),
-                            ) {
-                                Text(
-                                    if (percent > 0) "Continuar lectura" else "Abrir libro",
-                                    color = palette.onSurface,
-                                    style = typography.labelMd,
-                                )
-                            }
-                        }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = ClaySpacing.xs),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
-                    ) {
-                        Text(
-                            book.title,
-                            color = if (hovered) palette.primary else palette.onSurface,
-                            style = typography.titleMd,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                                .clickable { if (selectionMode) onToggleSelection() else onOpen() }
-                                .testTag("library_title_${book.id}"),
-                        )
-                        Box {
-                            ClayChromeAction(
+            Column(Modifier.fillMaxWidth().padding(ClaySpacing.md), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.fillMaxWidth().height(coverHeight).clip(coverShape)
+                        .border(if (selected) 2.dp else 1.dp, when {
+                            focused -> palette.focusRing
+                            selected -> palette.primary
+                            else -> palette.outlineVariant.copy(alpha = 0.65f)
+                        }, coverShape)
+                        .clickable(interactionSource = interactions, indication = null,
+                            onClickLabel = if (selectionMode) "Seleccionar ${book.title}" else "Leer ${book.title}") {
+                            if (selectionMode) onToggleSelection() else onOpen()
+                        }.testTag("library_open_${book.id}"),
+                ) {
+                    LibraryCover(book, palette)
+                    if (selectionMode || hovered) {
+                        Checkbox(selected, { onToggleSelection() },
+                            modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
+                                .clip(RoundedCornerShape(ClayRadius.sm)).background(palette.surfaceContainerLowest)
+                                .testTag("library_select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" })
+                    } else LibraryFormatBadge(book, palette, Modifier.align(Alignment.TopStart).padding(ClaySpacing.xs))
+                    LibraryPagePill(book, palette, Modifier.align(Alignment.TopEnd).padding(ClaySpacing.xs))
+                        Box(Modifier.align(Alignment.BottomEnd).padding(6.dp)) {
+                            ClayHeaderAction(
                                 "⋯",
                                 palette,
                                 "library_menu_${book.id}",
@@ -218,35 +160,25 @@ internal fun LibraryBookCard(
                                 }
                             }
                         }
-                    }
-                    Text(
-                        book.author,
-                        color = palette.onSurfaceVariant,
-                        style = typography.bodySm,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (detailed) Text(
-                        "${prediction.formattedRemainingTime()} restantes · " +
-                            if ((telemetry?.totalActiveSeconds ?: 0.0) > 0) "Según tu ritmo" else "Estimado inicial",
-                        color = palette.textMuted,
-                        style = typography.bodySm,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (book.isMissingOnDisk) Text(
-                        "No disponible en disco",
-                        color = palette.warningAmber,
-                        style = typography.bodySm,
-                        modifier = Modifier.testTag("library_missing_${book.id}"),
-                    )
                 }
+                Text(book.title, color = if (hovered) palette.primary else palette.onSurface,
+                    style = typography.titleMd,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        if (selectionMode) onToggleSelection() else onOpen()
+                    }.testTag("library_title_${book.id}"))
+                Text(book.author, color = palette.onSurfaceVariant, style = typography.bodySm)
+                if (detailed) Text(
+                    "${prediction.formattedRemainingTime()} restantes · " +
+                        if ((telemetry?.totalActiveSeconds ?: 0.0) > 0) "Según tu ritmo" else "Estimado inicial",
+                    color = palette.textMuted, style = typography.bodySm,
+                )
+                if (book.isMissingOnDisk) Text("No disponible en disco", color = palette.warningAmber,
+                    style = typography.bodySm, modifier = Modifier.testTag("library_missing_${book.id}"))
                 LibraryCardProgressFooter(book, palette, percent)
             }
         }
     }
 }
-
 /**
  * Status band and, when there is real progress, the page hint and the progress track of the card.
  * The track (and its `library_progress_<id>` tag) only exists for READING/FINISHED books or once
@@ -288,7 +220,7 @@ private fun LibraryStatusBand(book: BookDocument, palette: ClayPalette, percent:
         LibraryStatus.PENDING -> palette.textMuted
         LibraryStatus.READING -> palette.successMint
         LibraryStatus.FINISHED -> palette.onPrimaryContainer
-        LibraryStatus.ABANDONED -> palette.onWarningAmber
+        LibraryStatus.ABANDONED -> if (palette.isDarkReading) palette.warningAmber else palette.onWarningAmber
     }
     val label = when (book.libraryStatus) {
         LibraryStatus.PENDING -> "Sin comenzar"
@@ -321,7 +253,7 @@ private fun LibraryPagePill(book: BookDocument, palette: ClayPalette, modifier: 
     ) {
         Text(
             if (book.format == DocumentFormat.EPUB) "${book.totalPages} págs. est." else "${book.totalPages} págs",
-            color = palette.surfaceContainerLowest,
+            color = if (palette.isDarkReading) palette.onSurface else palette.surfaceContainerLowest,
             style = LocalClayTypography.current.labelSm,
             maxLines = 1,
         )

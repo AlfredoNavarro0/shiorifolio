@@ -80,7 +80,7 @@ private fun SettingsAccent.tileContent(palette: ClayPalette): Color = when (this
     SettingsAccent.PRIMARY -> palette.primary
     SettingsAccent.SECONDARY -> palette.secondary
     SettingsAccent.MUTED -> palette.onSurfaceVariant
-    SettingsAccent.MINT -> palette.onSuccessMint
+    SettingsAccent.MINT -> if (palette.isDarkReading) palette.successMint else palette.onSuccessMint
 }
 
 /**
@@ -121,8 +121,7 @@ private fun toneGlyph(theme: ReaderTheme): String = when (theme) {
  * `settings_try_reader_btn` and `settings_tone_card_<THEME>`; this pass adds the
  * `settings_quick_tone_<THEME>` quick swatches.
  *
- * The chrome is always the light clay palette (`ClayTokens.chrome`): this surface never uses
- * the reading tone for its own chrome, only to tint the live-preview canvas. Every control is
+ * The chrome follows the global app palette; reading colors also tint the live preview. Every control is
  * backed by real state or a real repository callback; the reference's cloud auto-save, reader
  * profile, "¡Respaldado!" toast, fifth tone ("Clay Pastel") and recommendation badges are absent
  * because the model has no backing for them. The header's `Respaldar` pill deliberately carries
@@ -183,7 +182,7 @@ internal fun SettingsAndShortcutsWorkspaceView(
             SettingsCategory.APPEARANCE -> {
                 SettingsPanelCard(
                     tag = "settings_theme_card",
-                    title = "Tema del Lector",
+                    title = "Tema de la aplicación",
                     subtitle = "Luminancia y pigmentación adaptadas para descanso visual prolongado.",
                     palette = palette,
                     glyph = "🎨",

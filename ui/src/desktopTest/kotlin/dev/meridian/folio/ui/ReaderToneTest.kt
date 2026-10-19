@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 /**
  * Contract of the reading tone in the desktop reader workspace: the clay book strip and the
  * floating command dock carry the new tags, the dock's tone swatches drive [ReaderTheme], and
- * the sheet — and only the sheet — repaints with the tone while the chrome stays light clay.
+ * both the sheet and app chrome repaint with the selected global theme.
  */
 @OptIn(ExperimentalTestApi::class)
 class ReaderToneTest {
@@ -38,7 +38,7 @@ class ReaderToneTest {
     @Test
     fun readerWorkspaceExposesBookStripDockAndEveryToneSwatch() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         onNodeWithTag("reader_book_strip").assertExists()
         onNodeWithTag("reader_back_to_library_btn").assertExists()
@@ -53,7 +53,7 @@ class ReaderToneTest {
     @Test
     fun dockToneSwatchesDriveTheReaderTheme() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         assertEquals(ReaderTheme.WHITE, repo.state.value.theme)
         for (theme in listOf(ReaderTheme.SAGE, ReaderTheme.DARK, ReaderTheme.WHITE)) {
@@ -64,9 +64,9 @@ class ReaderToneTest {
     }
 
     @Test
-    fun sheetFollowsTheToneWhileTheChromeStaysLight() = runComposeUiTest {
+    fun sheetAndDockFollowTheGlobalTheme() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         onNodeWithTag("reader_tone_WHITE").performClick()
         waitForIdle()
@@ -85,21 +85,20 @@ class ReaderToneTest {
             "the sheet must follow the tone (light $lightSheet vs dark $darkSheet)",
         )
 
-        // The chrome is tone independent: the dock stays the light clay surface and is clearly
-        // brighter than the nocturnal sheet underneath it.
+        // The dock must turn dark as well; changing only the document is a regression.
         val dockPixels = onNodeWithTag("reader_dock").captureToImage().toPixelMap()
         val dockY = (dockPixels.height * 0.5f).toInt()
         val cornerLuminance = luminance(dockPixels[dockPixels.width / 20, dockY])
         assertTrue(
-            cornerLuminance - darkSheet > 0.20f,
-            "the dock must stay light clay over the dark sheet (dock $cornerLuminance vs sheet $darkSheet)",
+            cornerLuminance < 0.35f,
+            "the dock must follow the global dark theme (dock $cornerLuminance)",
         )
     }
 
     @Test
     fun progressSliderCommitsThePageWhenTheGestureEnds() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
 
         val startPage = repo.currentBook()!!.currentPage
         val slider = onNodeWithTag("reader_progress_slider").assertExists()

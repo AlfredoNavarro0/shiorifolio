@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
@@ -18,6 +21,32 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class ClayModifiersTest {
+
+    @Test
+    fun shadowFadesOutsideTheCardWithoutSolidOffsetBlocks() = runComposeUiTest {
+        setContent {
+            Box(Modifier.size(180.dp, 140.dp).background(Color.White).testTag("shadow_canvas")) {
+                ClayShadowBox(
+                    shadow = ClayShadowStack(
+                        outer = listOf(ClayShadowLayer(0.dp, 0.dp, 16.dp, Color.Black.copy(alpha = 0.5f))),
+                        inner = emptyList(),
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.align(Alignment.Center).size(100.dp, 80.dp),
+                ) {
+                    Box(Modifier.matchParentSize().background(Color.White))
+                }
+            }
+        }
+        val pixels = onNodeWithTag("shadow_canvas").captureToImage().toPixelMap()
+        // Measure along a straight edge, clear of the rounded corners, at any test density.
+        fun redAt(dpX: Float) = pixels[(pixels.width * dpX / 180f).toInt(), pixels.height / 2].red
+        val near = redAt(142f)
+        val middle = redAt(146f)
+        val far = redAt(154f)
+        assertTrue(near < middle && middle < far, "Shadow must fade smoothly: $near, $middle, $far")
+        assertTrue(far > 0.98f, "Shadow must not become a detached background panel")
+    }
 
     @Test
     fun outerLayerRectTranslatesWithoutSpread() {

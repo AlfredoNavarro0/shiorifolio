@@ -1,6 +1,10 @@
 package dev.meridian.folio.ui
 
 import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import dev.meridian.folio.core.*
 import java.io.File
@@ -11,17 +15,69 @@ import kotlin.test.*
 @OptIn(ExperimentalTestApi::class)
 class LibraryWorkspaceTest {
     @Test
+    fun longBookTitlesWrapWithoutEllipsisAndFiltersDoNotReplaceTheShelf() = runDesktopComposeUiTest(width = 1000, height = 900) {
+        val repo = FolioRepository(persistToDisk = false)
+        val book = repo.currentBook()!!
+        val title = "The Gal Is Sitting Behind Me, and Loves Me — A Complete Long Title That Must Remain Readable, Volume One"
+        repo.updateDocumentMetadata(book.id, title, "Koharu Michinoku and Higure Hizuki")
+        setContent { MeridianFolioApp(repository = repo) }
+        val titleNode = onNodeWithTag("library_title_${book.id}").performScrollTo()
+        titleNode.assertWidthIsAtLeast(200.dp)
+        val layouts = mutableListOf<TextLayoutResult>()
+        titleNode.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertTrue(layouts.isNotEmpty())
+        assertFalse(layouts.single().hasVisualOverflow)
+        assertTrue((0 until layouts.single().lineCount).none { layouts.single().isLineEllipsized(it) })
+        onNodeWithTag("library_filters_btn").performScrollTo().performClick()
+        val dialog = onNodeWithTag("library_filter_panel").fetchSemanticsNode().boundsInRoot
+        assertTrue(dialog.width <= 650f && dialog.height <= 720f, "Filters must remain a compact dialog: $dialog")
+        onNodeWithTag("library_filter_advanced").performClick()
+        onNodeWithTag("library_apply_filters").assertIsDisplayed()
+        onNodeWithTag("library_min_progress").performScrollTo().performTextReplacement("90")
+        onNodeWithTag("library_max_progress").performTextReplacement("10")
+        onNodeWithTag("library_apply_filters").assertIsNotEnabled()
+        onNodeWithTag("library_reset_filters").performClick()
+        onNodeWithTag("library_apply_filters").assertIsEnabled()
+        onNodeWithTag("library_added_from").performScrollTo().performTextReplacement("2026-99-99")
+        onNodeWithTag("library_apply_filters").assertIsNotEnabled()
+        onNodeWithTag("library_reset_filters").performClick()
+        val clearedDate = onNodeWithTag("library_added_from").performScrollTo().fetchSemanticsNode()
+        assertEquals("", clearedDate.config[SemanticsProperties.EditableText].text)
+        onNodeWithTag("library_apply_filters").assertIsEnabled()
+        onNodeWithTag("library_cancel_filters").performClick()
+        onNodeWithTag("library_filter_panel").assertDoesNotExist()
+        onNodeWithTag("library_count").assertTextEquals("${repo.state.value.documents.size} / ${repo.state.value.documents.size} volúmenes")
+    }
+
+    @Test
+    fun cancelDiscardsDraftFiltersAndApplyCommitsThem() = runComposeUiTest {
+        val repo = FolioRepository(persistToDisk = false)
+        val total = repo.state.value.documents.size
+        setContent { MeridianFolioApp(repository = repo) }
+        onNodeWithTag("library_filters_btn").performClick()
+        onNodeWithTag("library_filter_status_FINISHED").performClick()
+        onNodeWithTag("library_cancel_filters").performClick()
+        onNodeWithTag("library_count").assertTextEquals("$total / $total volúmenes")
+        onNodeWithTag("library_filters_btn").performClick()
+        onNodeWithTag("library_filter_status_FINISHED").performClick()
+        onNodeWithTag("library_apply_filters").performClick()
+        onNodeWithTag("library_count").assertTextEquals("0 / $total volúmenes")
+        onNodeWithTag("library_quick_status_ALL").performClick()
+        onNodeWithTag("library_count").assertTextEquals("$total / $total volúmenes")
+    }
+
+    @Test
     fun libraryTabRendersFourVariantsAndSearchesByAuthor() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         repo.setTheme(ReaderTheme.DARK)
         val realEpub = File(System.getProperty("user.home"), "Downloads/The Gal Is Sitting Behind Me, and Loves Me vol 1 - Fungus FTL.epub")
         val imported = realEpub.takeIf { it.isFile }?.let { repo.library.importFile(it.path) }
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_LIBRARY").performClick()
         onNodeWithTag("library_workspace").assertExists()
         for (layout in LibraryLayout.entries) for (density in LibraryDensity.entries) {
-            onNodeWithTag("library_layout_${layout.name}").performClick()
-            onNodeWithTag("library_density_${density.name}").performClick()
+            libraryMenuItem("library_layout_${layout.name}").performClick()
+            libraryMenuItem("library_density_${density.name}").performClick()
             assertEquals(layout, repo.state.value.libraryPreferences.layout)
             assertEquals(density, repo.state.value.libraryPreferences.density)
             if (layout == LibraryLayout.CARDS && imported != null) {
@@ -36,7 +92,7 @@ class LibraryWorkspaceTest {
                 image.encodeToData(EncodedImageFormat.PNG)?.use { output.writeBytes(it.bytes) }
             }
         }
-        onNodeWithTag("library_layout_CARDS").performClick()
+        libraryMenuItem("library_layout_CARDS").performClick()
         repo.setTheme(ReaderTheme.WHITE)
         if (imported != null) waitUntil(timeoutMillis = 5_000) {
             onAllNodesWithContentDescription("Portada de ${imported.title}").fetchSemanticsNodes().isNotEmpty()
@@ -50,12 +106,12 @@ class LibraryWorkspaceTest {
         onNodeWithTag("library_quick_format_PDF").performClick()
         val author = repo.state.value.documents.first().author
         onNodeWithTag("library_search").performTextInput(author)
-        onNodeWithTag("library_select_all").performClick()
+        libraryMenuItem("library_select_all").performClick()
         onNodeWithTag("library_batch_status_ABANDONED").performScrollTo().performClick()
         assertTrue(repo.state.value.documents.filter { it.author.contains(author, true) }.all { it.libraryStatus == LibraryStatus.ABANDONED })
         assertTrue(repo.state.value.documents.filterNot { it.author.contains(author, true) }.all { it.libraryStatus == LibraryStatus.PENDING })
         onNodeWithTag("library_clear_selection").performScrollTo().performClick()
-        onNodeWithTag("library_layout_CARDS").performClick()
+        libraryMenuItem("library_layout_CARDS").performClick()
         val book = repo.state.value.documents.first()
         onNodeWithTag("library_menu_${book.id}").performClick()
         onNodeWithTag("library_menu_select_${book.id}").performClick()
@@ -70,10 +126,10 @@ class LibraryWorkspaceTest {
     fun deletionRequiresConfirmationAndEmptyLibraryCanStillImport() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
         repo.setTheme(ReaderTheme.DARK)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_LIBRARY").performClick()
         val count = repo.state.value.documents.size
-        onNodeWithTag("library_select_all").performClick()
+        libraryMenuItem("library_select_all").performClick()
         onNodeWithTag("library_delete").performScrollTo().performClick()
         onNodeWithTag("library_cancel_delete").performClick()
         assertEquals(count, repo.state.value.documents.size)
@@ -90,7 +146,7 @@ class LibraryWorkspaceTest {
     @Test
     fun libraryHeaderStatusChipsFilterPanelAndCardProgressBehave() = runComposeUiTest {
         val repo = FolioRepository(persistToDisk = false)
-        setContent { MeridianFolioApp(repository = repo) }
+        setContent { MeridianFolioApp(initialSection = MeridianSection.READER, repository = repo) }
         onNodeWithTag("section_tab_LIBRARY").performClick()
 
         // Header: clay title, live volume counter and the (single) tagged import control.
@@ -111,7 +167,7 @@ class LibraryWorkspaceTest {
         val reading = repo.state.value.documents.count { it.libraryStatus == LibraryStatus.READING }
         onNodeWithTag("library_quick_status_READING").performClick()
         onNodeWithTag("library_count").assertTextEquals("$reading / $total volúmenes")
-        onNodeWithTag("library_layout_CARDS").performClick()
+        libraryMenuItem("library_layout_CARDS").performClick()
         val progress = onNodeWithTag("library_progress_${book.id}")
         progress.assertExists()
         onNodeWithTag("library_quick_status_ALL").performClick()
@@ -125,6 +181,7 @@ class LibraryWorkspaceTest {
         onNodeWithTag("library_filter_panel").assertDoesNotExist()
         onNodeWithTag("library_filters_btn").performClick()
         onNodeWithText("Limpiar").performClick()
+        onNodeWithTag("library_apply_filters").performClick()
         onNodeWithTag("library_count").assertTextEquals("$total / $total volúmenes")
         onNodeWithTag("library_workspace").assertExists()
     }
