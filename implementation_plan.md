@@ -8,8 +8,8 @@ Este plan organiza los **10 bloques de requerimientos** en **6 iteraciones incre
 5. **Biblioteca avanzada ("Biblioteca") e importación/sincronización desde carpetas**.
 6. **Edición no destructiva de EPUB (Undo/Redo, buscar/reemplazar, reanclaje de notas) y respaldo/accesibilidad**.
 
-> [!WARNING]
-> **Dirección visual retirada (2026-10-18):** el sistema **Serene Vintage Reader** fue eliminado del repositorio. Las referencias visuales de las iteraciones 1–4 quedan como registro histórico; la interfaz se migrará al sistema **Tactile Claymorphism** del proyecto Stitch **"Claymorphic App Redesign"** (`projects/14806878120696973328`).
+> [!NOTE]
+> **Migración visual (2026-10-18 → 2026-10-19):** el sistema **Serene Vintage Reader** fue eliminado del repositorio y las referencias visuales de las iteraciones 1–4 quedan como registro histórico. La interfaz de escritorio migró al sistema **Tactile Claymorphism** del proyecto Stitch **"Claymorphic App Redesign"** (`projects/14806878120696973328`); el alcance móvil queda pendiente. Especificación y plan de la migración: `docs/superpowers/specs/2026-10-18-claymorphism-migration-design.md` y `docs/superpowers/plans/2026-10-18-claymorphism-migration.md`. Reglas visuales para desarrollo futuro: skill `.agents/skills/shiorifolio-design`.
 
 > [!IMPORTANT]
 > **Invariantes en todas las iteraciones**:

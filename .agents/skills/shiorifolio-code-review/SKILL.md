@@ -20,7 +20,7 @@ description: Checklist de revisión de código para ShioriFolio con criterios bl
 
 **Contratos**
 - Cambio de firma de `MeridianFolioApp` sin actualizar `Main.kt` y `MainActivity.kt`.
-- `testTag` existente eliminado o renombrado. Tags requeridos: `meridian_root`, `prediction_badge`, `page_reminder_banner`, `view_mode_<MODE>`, `theme_toggle_button`, `reading_timer_toggle`, `prev_page_button`, `next_page_button`, `open_reminder_btn`, `open_mark_phrase_btn`. El texto `shiorifolio` debe seguir visible en la vista de escritorio.
+- `testTag` existente eliminado o renombrado. Tags requeridos: `meridian_root`, `prediction_badge`, `page_reminder_banner`, `view_mode_<MODE>`, `theme_toggle_button`, `reading_timer_toggle`, `prev_page_button`, `next_page_button`, `open_reminder_btn`, `open_mark_phrase_btn`, `reader_page_indicator`, `reader_tone_<THEME>`, `library_workspace`, `settings_workspace_view`, `settings_category_<id>`, `notebook_header`, `lexicon_search_input`, `reattach_phrase_<id>`. El texto `shiorifolio` debe seguir visible en la vista de escritorio. La lista definitiva es la de los tests en `ui/src/desktopTest`: si un test la usa, no se toca.
 - `toggleTheme()` debe seguir alternando `WHITE ↔ DARK` (lo asume el test de UI).
 - Pérdida de cualquier funcionalidad listada en `shiorifolio-product`.
 
@@ -29,8 +29,13 @@ description: Checklist de revisión de código para ShioriFolio con criterios bl
 - Compose importado en `:core`.
 - Trabajo de I/O o render de PDF en el hilo de composición (usar `produceState` + `Dispatchers.Default`/`IO`, como `rememberLoadedImageBitmap`).
 
-**Diseño**
-- El sistema visual anterior fue retirado (2026-10-18); la UI está en migración a Claymorphism. Hasta que exista la nueva guía visual, los hallazgos de diseño se reportan como **Nota**, no como bloqueantes.
+**Diseño (Tactile Claymorphism)** — guía completa en `shiorifolio-design`
+- Superficie o componente nuevo sin primitivas clay cuando el kit las ofrece (`ClayCard`, `ClayPrimaryButton`, `ClaySecondaryButton`, `ClayChromeAction`, `ClayChip`, `ClaySegmentedTabs`, `ClayShadowBox`…).
+- Hex hardcodeado fuera de `theme/ClayTokens.kt`.
+- Chrome oscuro, o tono de lectura (`readingTone`) aplicado fuera de la hoja de lectura.
+- `palette.isDarkReading`/`palette.highlightColor` usados para pintar la hoja (deben derivarse del `ReadingTone`).
+- El wordmark `shiorifolio` (minúsculas exactas) deja de estar visible, o desaparece la sans DM Sans de la UI.
+- Un cambio de UI que toca `:core` (o al revés) sin que el alcance lo justifique.
 
 ## Recomendados
 - Componente nuevo añadido a `MeridianFolioApp.kt` en vez de a un archivo propio.
@@ -39,6 +44,8 @@ description: Checklist de revisión de código para ShioriFolio con criterios bl
 - Strings de UI nuevos en inglés.
 - Reescritura masiva de un archivo cuando bastaba un cambio local. Precedente: una sesión previa (GPT Sol) dejó el proyecto inconsistente con una refactorización a medias y hubo que revertirla.
 - Lógica de dominio nueva sin test en `MeridianCoreTest`; control nuevo de UI sin `testTag`.
+- Cambio visual sin regenerar capturas: corre `VisualCaptureTest` y revisa `ui/build/visual/*.png` (wide/mid/narrow).
+- Contraste nuevo sin anotar: texto de hoja ≥4.5:1 y acentos ≥3:1 contra su `tone.sheet`.
 
 ## Fuera de alcance
 - Formato/estilo cubierto por el compilador.

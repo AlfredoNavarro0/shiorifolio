@@ -16,7 +16,7 @@
 **ShioriFolio** (`shiorifolio`) es una aplicación nativa multiplataforma construida con **Kotlin Multiplatform** y **Compose Multiplatform** para **Windows, Linux y Android** (sin depender de un navegador web). Combina un lector literario inmersivo (pensado para lectura prolongada y dispositivos e-ink tipo Kindle) con un editor estructurado de documentos **PDF** y **EPUB**, telemetría de lectura en tiempo real y predicción adaptativa del tiempo restante de lectura.
 
 > [!NOTE]
-> La dirección visual anterior (*Serene Vintage Reader*) fue retirada. La interfaz se está migrando al sistema **Tactile Claymorphism** del proyecto Stitch **«Claymorphic App Redesign»**.
+> La dirección visual anterior (*Serene Vintage Reader*) fue retirada. La interfaz de escritorio ya migró al sistema **Tactile Claymorphism** del proyecto Stitch **«Claymorphic App Redesign»** (chrome clay siempre claro; los 4 tonos de papel se aplican solo a la hoja de lectura); la pasada móvil queda pendiente.
 
 ---
 
@@ -38,11 +38,11 @@
 - **Cuaderno de Palabras y Frases Guardadas (`Notebook / Lexicon`)**:
   - Subraya y guarda palabras o frases directamente desde la página activa con 4 tonos de resaltado (*Sage Ink*, *Gilded Amber*, *Sienna Clay*, *Viaduct Slate*), oración de contexto y notas personales.
 - **4 Tonos de Papel y Temas (Claro / Oscuro) + Controles Tipográficos**:
-  - **Kindle Cálido (`#FCF9F3`)**, **Sepia (`#F5EDDB`)**, **Salvia (`#EEF3EE`)** y **Oscuro / Noche (`#231F1C`)**.
+  - **Kindle Cálido (`#FCF9F3`)**, **Sepia (`#F5EDDB`)**, **Salvia (`#EEF3EE`)** y **Oscuro / Noche (`#221E2A`)**.
   - Ajuste en vivo del tamaño de fuente (`A-` / `17pt` / `A+`) e interlineado (`1.5×`, `1.8×`, `2.1×`).
 - **Doble Interfaz Adaptativa**:
-  - **Vista de Escritorio**: Barra editorial superior, pliego de doble página con cinta marcapáginas, dock flotante de comandos con deslizador de progreso y barra de telemetría inferior.
-  - **Vista Móvil Kindle Edge-to-Edge**: HUD flotante translúcido, progreso superior a sangre, píldora flotante de ritmo de lectura y hoja desplegable de *Ajustes de Lectura Kindle*.
+  - **Vista de Escritorio (Tactile Claymorphism)**: Navegación clay superior, barra del libro con retorno a Biblioteca, pliego centrado con chevrons, dock flotante con indicador y deslizador de progreso, controles tipográficos, 7 modos de vista y los 4 tonos de papel; superficies de Biblioteca, Cuaderno (palabras guardadas) y Ajustes en el mismo lenguaje.
+  - **Vista Móvil Kindle Edge-to-Edge**: HUD flotante translúcido, progreso superior a sangre, píldora flotante de ritmo de lectura y hoja desplegable de *Ajustes de Lectura Kindle* (migración a Claymorphism pendiente).
 
 ---
 
@@ -57,7 +57,7 @@ shiorifolio/
 │   ├── src/desktopMain/           # PlatformPdfEngine (Apache PDFBox + PDFRenderer)
 │   └── src/androidMain/           # PlatformPdfEngine (Android PdfRenderer)
 ├── ui/                            # Interfaz compartida en Compose Multiplatform
-│   ├── src/commonMain/            # MeridianFolioApp, workspaces y componentes compartidos
+│   ├── src/commonMain/            # Shell (MeridianFolioApp, ShellChrome), superficies (Reader/Notebook/Settings/Library) y theme/ (tokens clay)
 │   ├── src/desktopMain/           # Decodificador de imágenes Skia (Desktop)
 │   └── src/androidMain/           # Decodificador de imágenes BitmapFactory (Android)
 ├── desktopApp/                    # Punto de entrada JVM Desktop (Windows / Linux) y empaquetado nativo

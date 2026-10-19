@@ -9,7 +9,7 @@ description: Estructura de módulos, flujo de estado, persistencia, puntos expec
 | Módulo | Responsabilidad | Archivos clave |
 |---|---|---|
 | `:core` | Dominio, parsing, predicción, persistencia. Sin Compose. | `DocumentModels.kt`, `FolioRepository.kt`, `DocumentCodec.kt`, `ReadingPredictionEngine.kt`, `SampleLibrary.kt` |
-| `:ui` | Toda la UI compartida | `MeridianFolioApp.kt`, `ReaderViewModes.kt`, `PlatformImageLoader.kt` |
+| `:ui` | Toda la UI compartida | Shell: `MeridianFolioApp.kt`, `ShellChrome.kt`. Superficies: `LibraryWorkspace.kt`/`LibraryControls.kt`, `ReaderWorkspace.kt` (+ `ReaderViewModes.kt`, `ReaderPagination.kt`), `NotebookWorkspace.kt`, `SettingsWorkspace.kt`, `EditingWorkspace.kt` (diálogos). Tema: `theme/` (ver skill `shiorifolio-design`). |
 | `:desktopApp` | Ventana JVM, diálogos de archivo AWT, icono | `Main.kt` |
 | `:androidApp` | Activity, SAF/picker | `MainActivity.kt` |
 
@@ -42,7 +42,8 @@ Parámetros consumidos por ambas plataformas: `repository`, `onPickFileToImport`
 
 ## Particularidades de Kotlin Multiplatform
 - Propiedades nullable de clases de `:core` no admiten smart-cast en `:ui`: copiar a `val` local antes de comprobar (`val p = block.imagePath; if (p != null) ...`).
-- `MeridianFolioApp.kt` supera 3.900 líneas: componentes nuevos van en archivos nuevos dentro de `dev.meridian.folio.ui`.
+- `MeridianFolioApp.kt` es el shell (~2.000 líneas tras extraer las superficies Reader/Notebook): cada superficie vive en su propio archivo dentro de `dev.meridian.folio.ui` y los componentes nuevos van a archivo propio, nunca engordando el shell.
+- El sistema visual (Tactile Claymorphism) vive en `theme/` (`ClayTokens`, `ClayComponents`, `ClayModifiers`, `ClayTheme`, `ClayHelpers`); reglas de uso en el skill `shiorifolio-design`.
 
 ## Verificación obligatoria
 ```powershell
@@ -51,6 +52,7 @@ Parámetros consumidos por ambas plataformas: `repository`, `onPickFileToImport`
 ```
 - `MeridianCoreTest.parsesRealLightNovelEpub...` lee el EPUB real del usuario en `Downloads`.
 - `MeridianFolioUiTest` depende de los `testTag` listados en `shiorifolio-code-review`.
+- `VisualCaptureTest` (desktopTest) captura las 4 superficies en ancho amplio/medio/estrecho → `ui/build/visual/*.png`; úsalo para verificar cualquier cambio visual.
 
 ## Repositorio
 `https://github.com/AlfredoNavarro0/shiorifolio`, rama `main`. Sin historial previo al commit inicial: ante un cambio destructivo, revertir con `git`.
