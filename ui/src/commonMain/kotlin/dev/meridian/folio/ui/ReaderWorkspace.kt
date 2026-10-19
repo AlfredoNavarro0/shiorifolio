@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,6 +59,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -130,6 +133,12 @@ internal fun StitchDesktopTopNavigationBar(
     var showTypographyPopover by remember { mutableStateOf(false) }
     val uiFontFamily = uiAppearance.fontFamily.toComposeFontFamily()
     val isPdfOriginalMode = currentBook.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
+    // Real chapter position of the current page (1-based index into the book TOC); 0 when the
+    // book has no chapter metadata, in which case the strip omits the chapter badge.
+    val chapterNumber = remember(currentBook.id, currentBook.pages, currentBook.currentPage) {
+        val entries = currentBook.tableOfContents
+        entries.indexOfLast { it.startPage <= currentBook.currentPage } + 1
+    }
 
     Column(
         modifier = Modifier
@@ -142,6 +151,13 @@ internal fun StitchDesktopTopNavigationBar(
             ClayTopNav(activeSection, onSelectSection, theme, onToggleTheme)
         }
         if (activeSection == MeridianSection.READER) {
+            // 1A. BOOK STRIP (Stitch ribbon): back to library, real format, title and chapter.
+            ReaderBookStrip(
+                palette = palette,
+                book = currentBook,
+                chapterNumber = chapterNumber,
+                onBackToLibrary = { onSelectSection(MeridianSection.LIBRARY) },
+            )
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ClayChromeAction("Aa  Apariencia", palette, "top_typography_popover_btn", showTypographyPopover) {
@@ -365,6 +381,116 @@ internal fun StitchDesktopTopNavigationBar(
     }
 }
 
+/**
+ * Book strip of the desktop reader: the Stitch "top reader ribbon". A frosted clay card that
+ * carries a circular back-to-library button, the real document format breadcrumb, the book
+ * title and the current chapter badge (`Cap. N`, derived from the TOC). The tool row below
+ * stays a separate scrollable row so every chrome action keeps its reachability.
+ */
+@Composable
+private fun ReaderBookStrip(
+    palette: ClayPalette,
+    book: BookDocument,
+    chapterNumber: Int,
+    onBackToLibrary: () -> Unit,
+) {
+    val shape = RoundedCornerShape(ClayRadius.lg)
+    val pillShape = RoundedCornerShape(percent = 50)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ClaySpacing.gutterDesktop, vertical = ClaySpacing.xs),
+    ) {
+        ClayShadowBox(
+            shadow = ClayShadows.card,
+            shape = shape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .testTag("reader_book_strip"),
+        ) {
+            Box(Modifier.matchParentSize().clayFrosted(shape, surface = palette.cardSurface))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ClaySpacing.md, vertical = ClaySpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ClaySpacing.sm),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(pillShape)
+                        .background(palette.surfaceSecondary)
+                        .border(1.dp, palette.outlineVariant.copy(alpha = 0.6f), pillShape)
+                        .clayFocusableClickable(palette, shape = pillShape, onClick = onBackToLibrary)
+                        .testTag("reader_back_to_library_btn")
+                        .padding(horizontal = ClaySpacing.sm, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("←", color = palette.onSurfaceVariant, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Biblioteca",
+                        color = palette.onSurfaceVariant,
+                        style = LocalClayTypography.current.labelLg,
+                        maxLines = 1,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "BIBLIOTECA",
+                            color = palette.textMuted,
+                            style = LocalClayTypography.current.labelSm,
+                            maxLines = 1,
+                        )
+                        Text("/", color = palette.outlineVariant, style = LocalClayTypography.current.labelSm)
+                        Text(
+                            text = book.format.label.uppercase(),
+                            color = palette.primary,
+                            style = LocalClayTypography.current.labelSm,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
+                    ) {
+                        Text(
+                            text = book.title,
+                            color = palette.onSurface,
+                            style = LocalClayTypography.current.titleMd,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (chapterNumber > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(pillShape)
+                                    .background(palette.primaryContainer)
+                                    .padding(horizontal = ClaySpacing.xs, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = "Cap. $chapterNumber",
+                                    color = palette.onPrimaryContainer,
+                                    style = LocalClayTypography.current.labelSm,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // =========================================================================================
 // 2. STITCH DESKTOP READER WORKSPACE: BOOK SPREAD + SWALLOWTAIL RIBBON + COMMAND DOCK
 // =========================================================================================
@@ -498,40 +624,38 @@ internal fun StitchDesktopReaderSpreadWorkspace(
             fontSizePt
         }
 
+        val tone = ClayTokens.readingTone(theme, LocalClayUiAppearance.current.highContrastText)
+        val step = if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
+        val canGoPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)
+        val canGoNext = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)
+
         Box(
             modifier = Modifier
                 .weight(1f)
                 .widthIn(max = maxSpreadWidth)
                 .fillMaxWidth()
                 .then(if (viewMode == PageViewMode.VERTICAL_CONTINUOUS) Modifier else Modifier.readerPageGestures(book.id to viewMode) { direction ->
-                    pagination.turn(book, if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1, direction, onPageChange)
+                    pagination.turn(book, step, direction, onPageChange)
                 }),
             contentAlignment = Alignment.TopCenter,
         ) {
-            when (viewMode) {
+            // The sheet keeps a gutter for the lateral page chevrons (as in the Stitch mock)
+            // so they never cover the running header or the first glyphs of a line.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = if (isZenControlsHidden) 0.dp else 20.dp),
+            ) {
+                when (viewMode) {
                 PageViewMode.TWO_COLUMNS -> {
-                    // Dual-Page Open Book Spread inside a unified rounded-xl card with theme-consistent center spine crease
-                    Surface(
-                        color = palette.surfaceContainerLowest,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.outlineVariant),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .shadow(elevation = 1.dp, shape = RoundedCornerShape(14.dp)),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(palette.surfaceContainerLowest),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(palette.surfaceContainerLowest),
-                            ) {
+                    // Dual-Page Open Book Spread: one clay sheet with the two leaves and the spine crease.
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Row(modifier = Modifier.fillMaxSize()) {
                                 // Left Page (Verso)
                                 StitchBookSpreadLeaf(
                                     palette = palette,
+                                    tone = tone,
                                     pdfPageColorMode = pdfPageColorMode,
                                     book = book,
                                     page = currentPageObj,
@@ -544,14 +668,14 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                     onQuickSavePhrase = onQuickSavePhrase,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .fillMaxHeight()
-                                        .background(palette.surfaceContainerLowest),
+                                        .fillMaxHeight(),
                                 )
 
                                 // Right Page (Recto)
                                 if (secondPageObj != null) {
                                     StitchBookSpreadLeaf(
                                         palette = palette,
+                                        tone = tone,
                                         pdfPageColorMode = pdfPageColorMode,
                                         book = book,
                                         page = secondPageObj,
@@ -564,16 +688,15 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         onQuickSavePhrase = onQuickSavePhrase,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .fillMaxHeight()
-                                            .background(palette.surfaceContainerLowest),
+                                            .fillMaxHeight(),
                                     )
                                 } else {
-                                    // End of Book Colophon Leaf (theme-consistent dark/light surface)
+                                    // End of Book Colophon Leaf (follows the reading tone)
                                     Column(
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight()
-                                            .background(palette.surfaceContainerLowest)
+                                            .background(tone.sheet)
                                             .padding(36.dp),
                                         verticalArrangement = Arrangement.Center,
                                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -582,7 +705,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         Spacer(modifier = Modifier.height(14.dp))
                                         Text(
                                             text = "EXPLICIT LIBER · FIN DEL VOLUMEN",
-                                            color = palette.textMuted,
+                                            color = tone.muted,
                                             fontSize = 10.sp,
                                             fontFamily = FontFamily.Monospace,
                                             letterSpacing = 2.sp,
@@ -590,7 +713,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
                                             text = book.title,
-                                            color = palette.onSurface,
+                                            color = tone.ink,
                                             fontFamily = bookTypography.fontFamily.toComposeFontFamily(),
                                             fontWeight = FontWeight.SemiBold,
                                             fontSize = 20.sp,
@@ -599,7 +722,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
                                             text = "Has alcanzado el último folio (${book.totalPages} de ${book.totalPages}).",
-                                            color = palette.onSurfaceVariant,
+                                            color = tone.inkSoft,
                                             fontSize = 13.sp,
                                             textAlign = TextAlign.Center,
                                         )
@@ -607,7 +730,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                 }
                             }
 
-                            // Center Book Crease & Spine Shadow Gradient — uses palette.spineShadow (dark shadow in both light and dark modes, never light ink in dark mode!)
+                            // Center Book Crease & Spine Shadow Gradient — alphas follow the sheet tone.
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.Center)
@@ -617,9 +740,9 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         Brush.horizontalGradient(
                                             colors = listOf(
                                                 Color.Transparent,
-                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.12f else 0.02f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.18f else 0.04f),
-                                                palette.spineShadow.copy(alpha = if (palette.isDarkReading) 0.12f else 0.02f),
+                                                palette.spineShadow.copy(alpha = if (tone.isDark) 0.12f else 0.02f),
+                                                palette.spineShadow.copy(alpha = if (tone.isDark) 0.18f else 0.04f),
+                                                palette.spineShadow.copy(alpha = if (tone.isDark) 0.12f else 0.02f),
                                                 Color.Transparent,
                                             ),
                                         ),
@@ -630,7 +753,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                         .align(Alignment.Center)
                                         .width(1.dp)
                                         .fillMaxHeight()
-                                        .background(palette.outlineVariant),
+                                        .background(tone.border),
                                 )
                             }
                         }
@@ -638,16 +761,10 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 }
 
                 PageViewMode.ONE_COLUMN -> {
-                    Surface(
-                        color = palette.surfaceContainerLowest,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.outlineVariant),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp)),
-                    ) {
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
                         StitchBookSpreadLeaf(
                             palette = palette,
+                            tone = tone,
                             pdfPageColorMode = pdfPageColorMode,
                             book = book,
                             page = currentPageObj,
@@ -666,6 +783,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 PageViewMode.VERTICAL_PAGINATED -> {
                     VerticalPaginatedReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         savedPhrases = savedPhrases,
@@ -682,6 +800,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 PageViewMode.VERTICAL_CONTINUOUS -> {
                     VerticalContinuousReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         savedPhrases = savedPhrases,
@@ -703,6 +822,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 PageViewMode.REFLOW_TEXT -> {
                     AdaptiveReflowReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         page = currentPageObj,
@@ -722,16 +842,10 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                 }
 
                 PageViewMode.STRETCH -> {
-                    Surface(
-                        color = palette.surfaceContainerLowest,
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, palette.outlineVariant),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp)),
-                    ) {
+                    ReaderSheetCard(tone = tone, modifier = Modifier.fillMaxSize()) {
                         StitchBookSpreadLeaf(
                             palette = palette,
+                            tone = tone,
                             pdfPageColorMode = pdfPageColorMode,
                             book = book,
                             page = currentPageObj,
@@ -753,17 +867,10 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                         modifier = Modifier.fillMaxSize(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        Surface(
-                            color = palette.surfaceContainerLowest,
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, palette.outlineVariant),
-                            modifier = Modifier
-                                .weight(0.72f)
-                                .fillMaxHeight()
-                                .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp)),
-                        ) {
+                        ReaderSheetCard(tone = tone, modifier = Modifier.weight(0.72f).fillMaxHeight()) {
                             StitchBookSpreadLeaf(
                                 palette = palette,
+                                tone = tone,
                                 pdfPageColorMode = pdfPageColorMode,
                                 book = book,
                                 page = currentPageObj,
@@ -778,16 +885,9 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                             )
                         }
 
-                        // Side Marginalia & Telemetry Card in Wide Mode
-                        Surface(
-                            color = palette.surfaceContainerLowest,
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, palette.outlineVariant),
-                            modifier = Modifier
-                                .weight(0.28f)
-                                .fillMaxHeight()
-                                .shadow(elevation = 4.dp, shape = RoundedCornerShape(14.dp)),
-                        ) {
+                        // Side Marginalia & Telemetry Card in Wide Mode (part of the sheet, so it
+                        // follows the reading tone instead of the light chrome).
+                        ReaderSheetCard(tone = tone, modifier = Modifier.weight(0.28f).fillMaxHeight()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -796,7 +896,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                             ) {
                                 Text(
                                     text = "MARGINALIA & RITMO",
-                                    color = palette.textMuted,
+                                    color = tone.muted,
                                     fontSize = 10.5.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
@@ -805,22 +905,22 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "Restante: ${prediction.formattedRemainingTime()}",
-                                    color = palette.onSurface,
+                                    color = tone.ink,
                                     fontFamily = FontFamily.Serif,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 16.sp,
                                 )
                                 Text(
                                     text = "Cadencia: ${prediction.formattedPacePerPage()} (${prediction.formattedWpm()})",
-                                    color = palette.onSurfaceVariant,
+                                    color = tone.inkSoft,
                                     fontSize = 12.sp,
                                 )
                                 Spacer(modifier = Modifier.height(14.dp))
-                                HorizontalDivider(color = palette.outlineVariant)
+                                HorizontalDivider(color = tone.border)
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = "NOTAS EN ESTE FOLIO",
-                                    color = palette.textMuted,
+                                    color = tone.muted,
                                     fontSize = 10.5.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
@@ -831,7 +931,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                 if (pagePhrases.isEmpty()) {
                                     Text(
                                         text = "Haz clic en cualquier frase sugerida debajo de un párrafo para subrayarla y guardarla en la página ${currentPageObj.pageNumber}.",
-                                        color = palette.textMuted,
+                                        color = tone.muted,
                                         fontSize = 12.sp,
                                     )
                                 } else {
@@ -841,13 +941,13 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                                 .fillMaxWidth()
                                                 .padding(bottom = 8.dp)
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(palette.highlightColor(sp.tone))
+                                                .background(readingHighlight(tone, sp.tone))
                                                 .padding(10.dp),
                                         ) {
                                             Column {
                                                 Text(
                                                     text = "«${sp.phrase}»",
-                                                    color = palette.onSurface,
+                                                    color = tone.ink,
                                                     fontFamily = FontFamily.Serif,
                                                     fontWeight = FontWeight.SemiBold,
                                                     fontSize = 12.5.sp,
@@ -855,7 +955,7 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                                                 if (sp.note.isNotBlank()) {
                                                     Text(
                                                         text = sp.note,
-                                                        color = palette.onSurfaceVariant,
+                                                        color = tone.inkSoft,
                                                         fontSize = 11.sp,
                                                     )
                                                 }
@@ -867,6 +967,30 @@ internal fun StitchDesktopReaderSpreadWorkspace(
                         }
                     }
                 }
+                }
+            }
+
+            // Lateral clay page chevrons (Stitch side navigation): the existing prev/next tags.
+            // Hidden in Zen Mode, where the floating overlay carries the same two controls.
+            if (!isZenControlsHidden) {
+                ReaderPageChevron(
+                    palette = palette,
+                    tag = "prev_page_button",
+                    glyph = "‹",
+                    description = "Página anterior",
+                    enabled = canGoPrev,
+                    onClick = { pagination.turn(book, step, -1, onPageChange) },
+                    modifier = Modifier.align(Alignment.CenterStart),
+                )
+                ReaderPageChevron(
+                    palette = palette,
+                    tag = "next_page_button",
+                    glyph = "›",
+                    description = "Página siguiente",
+                    enabled = canGoNext,
+                    onClick = { pagination.turn(book, step, 1, onPageChange) },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
             }
 
             // Draped Top-Right Swallowtail Bookmark Ribbon (Shiori 栞) — positioned in reserved right margin so it NEVER overlaps "FOLIO N"
@@ -886,7 +1010,6 @@ internal fun StitchDesktopReaderSpreadWorkspace(
 
             // Floating Zen Mode Overlay Controls (when Zen Mode hides standard bars)
             if (isZenControlsHidden) {
-                val step = if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
                 Surface(
                     color = palette.surfaceSecondary.copy(alpha = 0.94f),
                     shape = RoundedCornerShape(10.dp),
@@ -1003,14 +1126,73 @@ internal fun StitchDesktopReaderSpreadWorkspace(
 private fun currentBookAuthorSubtitle(book: BookDocument): String =
     if (book.subtitle.isNotBlank()) "${book.author} · ${book.subtitle}" else book.author
 
+/** Highlight fill for [tone] inside the sheet: dark variant only on a dark sheet. */
+internal fun readingHighlight(tone: ReadingTone, highlight: HighlightTone): Color =
+    Color(if (tone.isDark) highlight.hexDark else highlight.hexLight)
+
+/**
+ * Clay sheet card: a [ClayShadows.card] card tinted with [ReadingTone.sheet] and outlined
+ * with [ReadingTone.border]. Used by the open spread and every single-sheet view mode so
+ * the reading surface — and only it — follows the reader theme.
+ */
+@Composable
+internal fun ReaderSheetCard(
+    tone: ReadingTone,
+    modifier: Modifier = Modifier,
+    shape: RoundedCornerShape = RoundedCornerShape(ClayRadius.lg),
+    content: @Composable BoxScope.() -> Unit,
+) {
+    ClayShadowBox(shadow = ClayShadows.card, shape = shape, modifier = modifier) {
+        Box(Modifier.matchParentSize().background(tone.sheet, shape))
+        content()
+    }
+}
+
+/**
+ * Circular clay page-turn chevron flanking the spread. Carries the existing
+ * `prev_page_button` / `next_page_button` tags; drawn last so it stays above the sheet.
+ */
+@Composable
+private fun ReaderPageChevron(
+    palette: ClayPalette,
+    tag: String,
+    glyph: String,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ClayShadowBox(shadow = ClayShadows.floating, shape = CircleShape, modifier = modifier.size(44.dp)) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .background(if (enabled) palette.cardSurface else palette.disabledContainer)
+                .border(1.dp, palette.outlineVariant.copy(alpha = 0.6f), CircleShape)
+                .clayFocusableClickable(palette, shape = CircleShape, enabled = enabled, onClick = onClick)
+                .testTag(tag)
+                .semantics { contentDescription = description },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = glyph,
+                color = if (enabled) palette.onSurfaceVariant else palette.disabledContent,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
 /**
  * Computes a ColorFilter for PDF rendered page images according to the user's selected
- * PdfPageColorMode and current ClayPalette.
+ * PdfPageColorMode and the current reading [tone].
  * Preserves natural colors on full-page artwork/illustrations in THEME_TINT dark mode so
  * covers and illustrations never turn into photo-negatives unless SMART_DARK is chosen.
  */
 internal fun pdfPageImageColorFilter(
     palette: ClayPalette,
+    tone: ReadingTone,
     mode: PdfPageColorMode,
     isPdfDocument: Boolean,
     isFullPageArtwork: Boolean = false,
@@ -1019,7 +1201,7 @@ internal fun pdfPageImageColorFilter(
     return when (mode) {
         PdfPageColorMode.ORIGINAL -> null
         PdfPageColorMode.THEME_TINT -> {
-            if (palette.isDarkReading) {
+            if (tone.isDark) {
                 if (isFullPageArtwork) {
                     null
                 } else {
@@ -1034,7 +1216,7 @@ internal fun pdfPageImageColorFilter(
                     ColorFilter.colorMatrix(m)
                 }
             } else {
-                ColorFilter.tint(palette.surfaceContainerLowest, androidx.compose.ui.graphics.BlendMode.Multiply)
+                ColorFilter.tint(tone.sheet, androidx.compose.ui.graphics.BlendMode.Multiply)
             }
         }
         PdfPageColorMode.SMART_DARK -> {
@@ -1058,6 +1240,7 @@ internal fun pdfPageImageColorFilter(
 @Composable
 internal fun StitchBookSpreadLeaf(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -1082,9 +1265,10 @@ internal fun StitchBookSpreadLeaf(
     }
     val isSingleImageLeaf = imageBlocks.size == 1 && nonEmptyTextBlocks.isEmpty()
 
-    val pdfColorFilter = remember(palette, pdfPageColorMode, book.format, isSingleImageLeaf) {
+    val pdfColorFilter = remember(palette, tone, pdfPageColorMode, book.format, isSingleImageLeaf) {
         pdfPageImageColorFilter(
             palette = palette,
+            tone = tone,
             mode = pdfPageColorMode,
             isPdfDocument = book.format == DocumentFormat.PDF,
             isFullPageArtwork = isSingleImageLeaf,
@@ -1106,7 +1290,7 @@ internal fun StitchBookSpreadLeaf(
 
     Column(
         modifier = modifier
-            .background(palette.surfaceContainerLowest)
+            .background(tone.sheet)
             .padding(
                 start = horizPad,
                 end = horizPad,
@@ -1126,7 +1310,7 @@ internal fun StitchBookSpreadLeaf(
             ) {
                 Text(
                     text = if (isLeftLeaf) book.title else page.chapterTitle,
-                    color = palette.textMuted,
+                    color = tone.muted,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.sp,
@@ -1137,7 +1321,7 @@ internal fun StitchBookSpreadLeaf(
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "${page.pageNumber}",
-                    color = palette.textMuted,
+                    color = tone.muted,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 10.sp,
@@ -1146,7 +1330,7 @@ internal fun StitchBookSpreadLeaf(
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.7f), thickness = 1.dp)
+            HorizontalDivider(color = tone.border, thickness = 1.dp)
         }
 
         // 2. Leaf Body: Full-Page Illustration/PDF Canvas vs. Scrollable Literary Body
@@ -1184,14 +1368,14 @@ internal fun StitchBookSpreadLeaf(
             }
         } else {
             PagedBookBody(
-                palette, pdfPageColorMode, book, page, pagePhrases, fontSizeSp, lineHeightSp,
+                palette, tone, pdfPageColorMode, book, page, pagePhrases, fontSizeSp, lineHeightSp,
                 bookTypography, onQuickSavePhrase,
                 Modifier.weight(1f).fillMaxWidth().padding(vertical = 10.dp),
             )
         }
         // 3. Archival Folio Footer ("Folio • M-01" and page number)
         Column(modifier = Modifier.fillMaxWidth()) {
-            HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.65f), thickness = 1.dp)
+            HorizontalDivider(color = tone.border, thickness = 1.dp)
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1201,14 +1385,14 @@ internal fun StitchBookSpreadLeaf(
                 if (isLeftLeaf) {
                     Text(
                         text = "${page.pageNumber}",
-                        color = palette.onSurface,
+                        color = tone.ink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
                     )
                     Text(
                         text = "Folio • SF-${page.pageNumber.toString().padStart(2, '0')} (${page.wordCount} palabras)",
-                        color = palette.textMuted,
+                        color = tone.muted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                     )
@@ -1219,13 +1403,13 @@ internal fun StitchBookSpreadLeaf(
                         } else {
                             "ShioriFolio • Edición Crítica (${page.wordCount} palabras)"
                         },
-                        color = palette.textMuted,
+                        color = tone.muted,
                         fontStyle = FontStyle.Italic,
                         fontSize = 10.5.sp,
                     )
                     Text(
                         text = "${page.pageNumber}",
-                        color = palette.onSurface,
+                        color = tone.ink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
@@ -1237,9 +1421,15 @@ internal fun StitchBookSpreadLeaf(
 }
 
 /**
- * Floating Reader Command Dock (Stitch Desktop Bottom Control Dock):
- * - Top Row: Prev/Next + `1-2 / 237` counter, `0% — [Interactive Scrubber] — 100%`, and Live `Ritmo` Telemetry Pill
- * - Bottom Row: View Mode Switcher (`Doble página`, `Simple`, `Ancho`, `Stretch`), 4 Circular Tone Swatches, and Typography / PDF Mode controls.
+ * Floating Reader Command Dock (Stitch Desktop Bottom Control Dock), a frosted clay card:
+ * - Top Row: `Pág. 1-2 / 237` indicator, `0% — [Interactive Scrubber] — 100%` (the slider only
+ *   commits through [onPageChange] when the gesture ends), the live `Ritmo` telemetry pill and
+ *   the reflow typography controls.
+ * - Bottom Row: View Mode Switcher (`Doble página`, `Simple`, `Ancho`, `Stretch`), the four clay
+ *   `Tono Ambiental` swatches (`reader_tone_<THEME>`) and the PDF original/reflow controls.
+ *
+ * Page turning lives on the lateral clay chevrons, not here, so the dock never duplicates the
+ * `prev_page_button` / `next_page_button` tags.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1262,21 +1452,31 @@ private fun StitchFloatingCommandDock(
     onUpdateBookTypography: ((BookTypographySettings) -> BookTypographySettings) -> Unit,
     onToggleTimer: () -> Unit,
 ) {
-    val pagination = LocalReaderPagination.current
-    val step = if (viewMode == PageViewMode.TWO_COLUMNS) 2 else 1
     val isPdfOriginalMode = book.format == DocumentFormat.PDF && !bookTypography.pdfPreferReflowText
+    // Drag preview only: the repository is updated once, when the drag ends.
+    var sliderPage by remember(book.currentPage) { mutableStateOf(book.currentPage.toFloat()) }
+    val dockShape = RoundedCornerShape(ClayRadius.md)
+    val pageRangeLabel = if (secondPageNumber != null) {
+        "${book.currentPage}-${secondPageNumber} / ${book.totalPages}"
+    } else {
+        "${book.currentPage} / ${book.totalPages}"
+    }
 
-    Surface(
-        color = palette.surfaceContainerLowest,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, palette.outlineVariant),
+    // ClayShadowBox only paints matchParentSize layers, so the dock's own content sizes the
+    // outer Box and the frosted surface is drawn underneath it.
+    Box(
         modifier = Modifier
             .widthIn(max = 1240.dp)
             .fillMaxWidth()
-            .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp)),
+            .testTag("reader_dock"),
     ) {
+        ClayShadowBox(shadow = ClayShadows.floating, shape = dockShape, modifier = Modifier.matchParentSize()) {
+            Box(Modifier.matchParentSize().clayFrosted(dockShape, surface = palette.cardSurface))
+        }
         Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Top Row: Page Stepper + Interactive Scrubber + Live Reading Pace Telemetry Pill
@@ -1285,66 +1485,29 @@ private fun StitchFloatingCommandDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                // Prev / Counter / Next
-                val canGoPrev = book.currentPage > 1 || pagination.canTurn(book.currentPage, step, -1)
-                val canGoNext = book.currentPage < book.totalPages || pagination.canTurn(book.currentPage, step, 1)
+                // Page indicator pill (the lateral clay chevrons own page turning)
                 Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(ClayRadius.sm))
+                        .background(palette.surfaceSecondary)
+                        .border(1.dp, palette.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(ClayRadius.sm))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .testTag("reader_page_indicator"),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (canGoPrev) palette.surfaceContainerHigh else palette.disabledContainer)
-                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
-                            .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoPrev) {
-                                pagination.turn(book, step, -1, onPageChange)
-                            }
-                            .testTag("prev_page_button"),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "‹",
-                            color = if (canGoPrev) palette.onSurface else palette.disabledContent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    val pageRangeLabel = if (secondPageNumber != null) {
-                        "${book.currentPage}-${secondPageNumber} / ${book.totalPages}"
-                    } else {
-                        "${book.currentPage} / ${book.totalPages}"
-                    }
+                    Text(
+                        text = "Pág.",
+                        color = palette.textMuted,
+                        style = LocalClayTypography.current.labelSm,
+                    )
                     Text(
                         text = pageRangeLabel,
                         color = palette.onSurface,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 4.dp),
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (canGoNext) palette.surfaceContainerHigh else palette.disabledContainer)
-                            .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
-                            .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp), enabled = canGoNext) {
-                                pagination.turn(book, step, 1, onPageChange)
-                            }
-                            .testTag("next_page_button"),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "›",
-                            color = if (canGoNext) palette.onSurface else palette.disabledContent,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
                 }
 
                 // Interactive Scrubber Slider (0% — Slider — 100%)
@@ -1360,9 +1523,10 @@ private fun StitchFloatingCommandDock(
                         fontSize = 11.sp,
                     )
                     Slider(
-                        value = book.currentPage.toFloat(),
-                        onValueChange = { newVal ->
-                            onPageChange(newVal.roundToInt().coerceIn(1, book.totalPages))
+                        value = sliderPage,
+                        onValueChange = { sliderPage = it },
+                        onValueChangeFinished = {
+                            onPageChange(sliderPage.roundToInt().coerceIn(1, book.totalPages))
                         },
                         valueRange = 1f..book.totalPages.coerceAtLeast(2).toFloat(),
                         colors = SliderDefaults.colors(
@@ -1372,7 +1536,8 @@ private fun StitchFloatingCommandDock(
                         ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(22.dp),
+                            .height(22.dp)
+                            .testTag("reader_progress_slider"),
                     )
                     Text(
                         text = "100%",
@@ -1407,6 +1572,48 @@ private fun StitchFloatingCommandDock(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                     )
+                }
+
+                // Reflow typography micro-controls (hidden in PDF original view, where the glyph
+                // size is baked into the scanned page).
+                if (!isPdfOriginalMode) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(ClayRadius.sm))
+                            .background(palette.surfaceContainerHigh)
+                            .border(1.dp, palette.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(ClayRadius.sm))
+                            .testTag("dock_reflow_font_controls"),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(ClayRadius.sm)) {
+                                    onFontSizeChange(fontSizePt - 1f)
+                                }
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                .testTag("dock_font_decrease_btn"),
+                        ) {
+                            Text("A-", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
+                        Text(
+                            text = "${fontSizePt.toInt()}pt",
+                            color = palette.textMuted,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 3.dp),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(ClayRadius.sm)) {
+                                    onFontSizeChange(fontSizePt + 1f)
+                                }
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                .testTag("dock_font_increase_btn"),
+                        ) {
+                            Text("A+", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
+                    }
                 }
             }
 
@@ -1458,36 +1665,26 @@ private fun StitchFloatingCommandDock(
                     }
                 }
 
-                // 4 Circular Screen Tone Swatches (Kindle Cálido #FCF9F3, Sepia #F5EDDB, Salvia #EEF3EE, Oscuro #1E1B18)
+                // Screen tone presets: the same clay swatches the shell uses, tagged per theme.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(ClaySpacing.xs),
                 ) {
                     Text(
-                        text = "TONO",
+                        text = "Tono Ambiental",
                         color = palette.textMuted,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.2.sp,
+                        style = LocalClayTypography.current.labelSm,
                     )
-                    ReaderTheme.entries.forEach { t ->
-                        val isSel = t == theme
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(Color(t.swatchHex))
-                                .border(
-                                    width = if (isSel) 2.2.dp else 1.dp,
-                                    color = if (isSel) palette.primary else palette.textMuted.copy(alpha = 0.5f),
-                                    shape = CircleShape,
-                                )
-                                .clayFocusableClickable(palette = palette, shape = CircleShape) { onSelectTheme(t) },
-                        )
-                    }
+                    ClayToneSwatches(
+                        selected = theme,
+                        onSelect = onSelectTheme,
+                        palette = palette,
+                        tagPrefix = "reader_tone_",
+                    )
                 }
 
-                // Typography Micro-Controls (In PDF Original View, do NOT offer reflow font size controls; offer PDF mode switch instead)
+                // PDF mode controls plus the line-spacing cycle (the reflow font controls sit in
+                // the top row so they stay visible in every non-PDF-original layout).
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1545,42 +1742,6 @@ private fun StitchFloatingCommandDock(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
-                            }
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(palette.surfaceContainerHigh)
-                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
-                                .testTag("dock_reflow_font_controls"),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
-                                        onFontSizeChange(fontSizePt - 1f)
-                                    }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp)
-                                    .testTag("dock_font_decrease_btn"),
-                            ) {
-                                Text("A-", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                            }
-                            Text(
-                                text = "${fontSizePt.toInt()}pt",
-                                color = palette.textMuted,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 4.dp),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clayFocusableClickable(palette = palette, shape = RoundedCornerShape(8.dp)) {
-                                        onFontSizeChange(fontSizePt + 1f)
-                                    }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp)
-                                    .testTag("dock_font_increase_btn"),
-                            ) {
-                                Text("A+", color = palette.onSurface, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                             }
                         }
 

@@ -39,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -183,6 +182,7 @@ internal fun ZoomAndFitControlStrip(
 @Composable
 internal fun VerticalPaginatedReaderCanvas(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     savedPhrases: List<SavedPhrase>,
@@ -197,10 +197,12 @@ internal fun VerticalPaginatedReaderCanvas(
     val page = book.pages.firstOrNull { it.pageNumber == book.currentPage } ?: book.pages.first()
     val effectiveFontSize = (fontSizePt * zoomScale.coerceIn(0.70f, 1.80f)).coerceIn(12f, 34f)
     val pagination = LocalReaderPagination.current
-    Surface(color = palette.surfaceContainerLowest, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, palette.outlineVariant),
+    ReaderSheetCard(
+        tone = tone,
         modifier = modifier.fillMaxSize().testTag("vertical_paginated_canvas")
-            .readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) }) {
-        StitchBookSpreadLeaf(palette, pdfPageColorMode, book, page, savedPhrases, effectiveFontSize,
+            .readerPageGestures(book.id) { pagination.turn(book, 1, it, onPageChange) },
+    ) {
+        StitchBookSpreadLeaf(palette, tone, pdfPageColorMode, book, page, savedPhrases, effectiveFontSize,
             effectiveFontSize * lineSpacingMultiplier, bookTypography, isLeftLeaf = false,
             onQuickSavePhrase = onQuickSavePhrase, modifier = Modifier.fillMaxSize().testTag("vertical_page_sheet_${page.pageNumber}"))
     }
@@ -214,6 +216,7 @@ internal fun VerticalPaginatedReaderCanvas(
 @Composable
 internal fun VerticalContinuousReaderCanvas(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     savedPhrases: List<SavedPhrase>,
@@ -242,13 +245,10 @@ internal fun VerticalContinuousReaderCanvas(
     val horizPad = bookTypography.horizontalMarginDp.coerceIn(16f, 64f).dp
     val paraSpacing = bookTypography.paragraphSpacingDp.coerceIn(4f, 32f).dp
 
-    Surface(
-        color = palette.surfaceContainerLowest,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, palette.outlineVariant),
+    ReaderSheetCard(
+        tone = tone,
         modifier = modifier
             .fillMaxSize()
-            .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp))
             .testTag("vertical_continuous_canvas"),
     ) {
         Column(
@@ -258,6 +258,7 @@ internal fun VerticalContinuousReaderCanvas(
         ) {
             ReflowStatusAndReliabilityBanner(
                 palette = palette,
+                tone = tone,
                 book = book,
                 currentPage = book.currentPage,
                 isReliable = reconstruction.isReliable,
@@ -279,6 +280,7 @@ internal fun VerticalContinuousReaderCanvas(
                     items(reconstruction.items, key = { "${book.id}_cont_${it.id}_${it.sourcePageNumber}" }) { item ->
                         ReflowBlockItemView(
                             palette = palette,
+                            tone = tone,
                             pdfPageColorMode = pdfPageColorMode,
                             book = book,
                             item = item,
@@ -306,6 +308,7 @@ internal fun VerticalContinuousReaderCanvas(
 @Composable
 internal fun AdaptiveReflowReaderCanvas(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -335,13 +338,10 @@ internal fun AdaptiveReflowReaderCanvas(
     val vertPad = bookTypography.verticalMarginDp.coerceIn(8f, 44f).dp
     val paraSpacing = bookTypography.paragraphSpacingDp.coerceIn(4f, 32f).dp
 
-    Surface(
-        color = palette.surfaceContainerLowest,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, palette.outlineVariant),
+    ReaderSheetCard(
+        tone = tone,
         modifier = modifier
             .fillMaxSize()
-            .shadow(elevation = 5.dp, shape = RoundedCornerShape(14.dp))
             .testTag("adaptive_reflow_canvas"),
     ) {
         Column(
@@ -361,7 +361,7 @@ internal fun AdaptiveReflowReaderCanvas(
                 ) {
                     Text(
                         text = "${page.chapterTitle.uppercase()} · MODO TEXTO ADAPTABLE",
-                        color = palette.primary,
+                        color = tone.muted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 1.4.sp,
@@ -371,19 +371,20 @@ internal fun AdaptiveReflowReaderCanvas(
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "FOLIO ${page.pageNumber}",
-                        color = palette.textMuted,
+                        color = tone.muted,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 10.sp,
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.7f), thickness = 1.dp)
+                HorizontalDivider(color = tone.border, thickness = 1.dp)
             }
 
             // Reliability & OCR Status Banner
             ReflowStatusAndReliabilityBanner(
                 palette = palette,
+                tone = tone,
                 book = book,
                 currentPage = page.pageNumber,
                 isReliable = reconstruction.isReliable,
@@ -397,7 +398,7 @@ internal fun AdaptiveReflowReaderCanvas(
 
             if (reconstruction.items.isEmpty()) {
                 Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Esta página no contiene texto extraíble. Puedes reconocer el texto o volver al documento original.", color = palette.onSurfaceVariant)
+                    Text("Esta página no contiene texto extraíble. Puedes reconocer el texto o volver al documento original.", color = tone.inkSoft)
                     ClayChromeAction("Reconocer texto", palette, "pdf_ocr_empty_page_btn") { onRunOcrOnPage(page.pageNumber) }
                     ClayChromeAction("Volver a Vista Original", palette, "reflow_empty_original_btn", onClick = onReturnToOriginalView)
                 }
@@ -405,13 +406,13 @@ internal fun AdaptiveReflowReaderCanvas(
                 val reflowPage = remember(page, reconstruction.items) {
                     page.copy(blocks = reconstruction.items.map { dev.meridian.folio.core.ContentBlock(it.id, it.style, it.text, it.imagePath) })
                 }
-                PagedBookBody(palette, pdfPageColorMode, book, reflowPage,
+                PagedBookBody(palette, tone, pdfPageColorMode, book, reflowPage,
                     savedPhrases.filter { it.pageNumber == page.pageNumber }, effectiveFontSize, effectiveLineHeight,
                     bookTypography, onQuickSavePhrase, Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp))
             }
             // Bottom Footer
             Column(modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider(color = palette.outlineVariant.copy(alpha = 0.65f), thickness = 1.dp)
+                HorizontalDivider(color = tone.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -420,13 +421,13 @@ internal fun AdaptiveReflowReaderCanvas(
                 ) {
                     Text(
                         text = "Texto Adaptable • Archivo original intacto (${page.wordCount} palabras)",
-                        color = palette.textMuted,
+                        color = tone.muted,
                         fontStyle = FontStyle.Italic,
                         fontSize = 10.5.sp,
                     )
                     Text(
                         text = "${page.pageNumber} / ${book.totalPages}",
-                        color = palette.onSurface,
+                        color = tone.ink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
                         fontSize = 11.5.sp,
@@ -440,6 +441,7 @@ internal fun AdaptiveReflowReaderCanvas(
 @Composable
 internal fun ReflowStatusAndReliabilityBanner(
     palette: ClayPalette,
+    tone: ReadingTone,
     book: BookDocument,
     currentPage: Int,
     isReliable: Boolean,
@@ -453,9 +455,9 @@ internal fun ReflowStatusAndReliabilityBanner(
     if (book.format != DocumentFormat.PDF && reliabilityWarning == null && mergedPageBreaks == 0) return
 
     Surface(
-        color = if (!isReliable) palette.warningAmber.copy(alpha = 0.14f) else palette.surfaceSecondary,
+        color = tone.sheet,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, if (!isReliable) palette.warningAmber else palette.outlineVariant),
+        border = BorderStroke(1.dp, if (!isReliable) palette.warningAmber else tone.border),
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp, bottom = 4.dp)
@@ -472,7 +474,7 @@ internal fun ReflowStatusAndReliabilityBanner(
                 Text(
                     text = reliabilityWarning
                         ?: "Flujo continuo reconstruido (saltos de página unidos: $mergedPageBreaks · guiones unidos: $dehyphenatedWords · archivo original preservado).",
-                    color = palette.onSurface,
+                    color = if (!isReliable) palette.warningAmber else tone.inkSoft,
                     fontSize = 11.5.sp,
                     fontWeight = if (!isReliable) FontWeight.SemiBold else FontWeight.Normal,
                 )
@@ -529,6 +531,7 @@ internal fun ReflowStatusAndReliabilityBanner(
 @Composable
 private fun ReflowBlockItemView(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     item: ReflowedBlockItem,
@@ -575,6 +578,7 @@ private fun ReflowBlockItemView(
         if (bmp != null) {
             val pdfFilter = pdfPageImageColorFilter(
                 palette = palette,
+                tone = tone,
                 mode = pdfPageColorMode,
                 isPdfDocument = book.format == DocumentFormat.PDF,
                 isFullPageArtwork = true,
@@ -598,8 +602,8 @@ private fun ReflowBlockItemView(
         return
     }
 
-    val annotated = remember(item.text, pagePhrases, palette.isDarkReading) {
-        buildHighlightedAnnotatedString(item.text, pagePhrases, palette)
+    val annotated = remember(item.text, pagePhrases, tone) {
+        buildHighlightedAnnotatedString(item.text, pagePhrases, tone)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -615,7 +619,7 @@ private fun ReflowBlockItemView(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "CAPÍTULO · FOLIO ${item.sourcePageNumber}",
-                            color = palette.warningAmber,
+                            color = tone.muted,
                             fontSize = 9.5.sp,
                             fontFamily = FontFamily.Monospace,
                             letterSpacing = 1.8.sp,
@@ -624,7 +628,7 @@ private fun ReflowBlockItemView(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = annotated,
-                            color = palette.onSurface,
+                            color = tone.ink,
                             fontFamily = contentFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = (fontSizeSp + 4f).sp,
@@ -635,14 +639,14 @@ private fun ReflowBlockItemView(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(5.dp))
-                                .background(palette.surfaceContainerHigh)
-                                .border(1.dp, palette.outlineVariant, RoundedCornerShape(5.dp))
+                                .background(tone.sheet)
+                                .border(1.dp, tone.border, RoundedCornerShape(5.dp))
                                 .clickable { onSelectSourcePage() }
                                 .padding(horizontal = 7.dp, vertical = 2.dp),
                         ) {
                             Text(
                                 text = "p.${item.sourcePageNumber}",
-                                color = palette.textMuted,
+                                color = tone.muted,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 10.sp,
                             )
@@ -657,7 +661,7 @@ private fun ReflowBlockItemView(
                     Spacer(modifier = Modifier.width(14.dp))
                     Text(
                         text = annotated,
-                        color = palette.onSurfaceVariant,
+                        color = tone.inkSoft,
                         fontFamily = contentFontFamily,
                         fontStyle = FontStyle.Italic,
                         fontSize = fontSizeSp.sp,
@@ -672,13 +676,13 @@ private fun ReflowBlockItemView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(palette.surfaceSecondary)
-                        .border(1.dp, palette.outlineVariant, RoundedCornerShape(8.dp))
+                        .background(tone.sheet)
+                        .border(1.dp, tone.border, RoundedCornerShape(8.dp))
                         .padding(12.dp),
                 ) {
                     Text(
                         text = annotated,
-                        color = palette.onSurface,
+                        color = tone.ink,
                         fontFamily = contentFontFamily,
                         fontSize = (fontSizeSp - 1f).sp,
                         lineHeight = (lineHeightSp - 2f).sp,
@@ -690,7 +694,7 @@ private fun ReflowBlockItemView(
             BlockStyle.PARAGRAPH, BlockStyle.IMAGE -> {
                 Text(
                     text = annotated,
-                    color = palette.onSurface,
+                    color = tone.ink,
                     fontFamily = contentFontFamily,
                     fontSize = fontSizeSp.sp,
                     lineHeight = lineHeightSp.sp,
@@ -713,14 +717,18 @@ private fun ReflowBlockItemView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(
-                                if (alreadySaved) palette.highlightColor(HighlightTone.SAGE) else palette.surfaceContainerHigh.copy(alpha = 0.7f),
+                                if (alreadySaved) {
+                                    readingHighlight(tone, HighlightTone.SAGE)
+                                } else {
+                                    tone.border.copy(alpha = 0.35f)
+                                },
                             )
                             .clickable { onQuickSavePhrase(candidate, item.text) }
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Text(
                             text = if (alreadySaved) "✓ $candidate" else "+ $candidate",
-                            color = palette.onSurfaceVariant,
+                            color = tone.inkSoft,
                             fontSize = 9.5.sp,
                         )
                     }

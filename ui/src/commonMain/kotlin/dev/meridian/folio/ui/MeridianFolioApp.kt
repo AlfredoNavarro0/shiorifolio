@@ -1081,6 +1081,7 @@ private fun StitchMobileKindleReaderLayout(
     onSwitchToDesktopView: () -> Unit,
 ) {
     val pagination = LocalReaderPagination.current
+    val tone = ClayTokens.readingTone(theme, LocalClayUiAppearance.current.highContrastText)
     val currentPageObj = book.pages.find { it.pageNumber == book.currentPage } ?: book.pages.first()
     val pagePhrases = remember(savedPhrases, currentPageObj.pageNumber) {
         savedPhrases.filter { it.pageNumber == currentPageObj.pageNumber }
@@ -1094,9 +1095,10 @@ private fun StitchMobileKindleReaderLayout(
     }
     val isSingleImagePage = imageBlocks.size == 1 && nonEmptyTextBlocks.isEmpty()
 
-    val pdfColorFilter = remember(palette, pdfPageColorMode, book.format, isSingleImagePage) {
+    val pdfColorFilter = remember(palette, tone, pdfPageColorMode, book.format, isSingleImagePage) {
         pdfPageImageColorFilter(
             palette = palette,
+            tone = tone,
             mode = pdfPageColorMode,
             isPdfDocument = book.format == DocumentFormat.PDF,
             isFullPageArtwork = isSingleImagePage,
@@ -1118,7 +1120,7 @@ private fun StitchMobileKindleReaderLayout(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.canvas),
+            .background(tone.sheet),
     ) {
         val viewportHeight = maxHeight
         val isLandscape = maxWidth > maxHeight
@@ -1138,6 +1140,7 @@ private fun StitchMobileKindleReaderLayout(
                 ) {
                     VerticalPaginatedReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         savedPhrases = savedPhrases,
@@ -1164,6 +1167,7 @@ private fun StitchMobileKindleReaderLayout(
                 ) {
                     VerticalContinuousReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         savedPhrases = savedPhrases,
@@ -1195,6 +1199,7 @@ private fun StitchMobileKindleReaderLayout(
                 ) {
                     AdaptiveReflowReaderCanvas(
                         palette = palette,
+                        tone = tone,
                         pdfPageColorMode = pdfPageColorMode,
                         book = book,
                         page = currentPageObj,
@@ -1249,7 +1254,7 @@ private fun StitchMobileKindleReaderLayout(
                     }
                 } else {
                     PagedBookBody(
-                        palette, pdfPageColorMode, book, currentPageObj, pagePhrases,
+                        palette, tone, pdfPageColorMode, book, currentPageObj, pagePhrases,
                         effectiveFontSizePt, effectiveFontSizePt * lineSpacingMultiplier,
                         bookTypography, onQuickSavePhrase,
                         Modifier.fillMaxSize().padding(
@@ -1989,7 +1994,7 @@ private fun StitchMobileKindleReaderLayout(
 internal fun buildHighlightedAnnotatedString(
     text: String,
     phrases: List<SavedPhrase>,
-    palette: ClayPalette,
+    tone: ReadingTone,
 ): AnnotatedString = buildAnnotatedString {
     append(text)
     val lower = text.lowercase()
@@ -2001,8 +2006,8 @@ internal fun buildHighlightedAnnotatedString(
             val endIdx = (startIdx + target.length).coerceAtMost(text.length)
             addStyle(
                 style = SpanStyle(
-                    background = palette.highlightColor(saved.tone),
-                    color = palette.onSurface,
+                    background = readingHighlight(tone, saved.tone),
+                    color = tone.ink,
                     fontWeight = FontWeight.SemiBold,
                 ),
                 start = startIdx,

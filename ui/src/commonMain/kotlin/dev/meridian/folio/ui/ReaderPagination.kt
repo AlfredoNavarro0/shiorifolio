@@ -133,6 +133,7 @@ internal fun paginateText(
 @Composable
 internal fun PagedBookBody(
     palette: ClayPalette,
+    tone: ReadingTone,
     pdfPageColorMode: PdfPageColorMode,
     book: BookDocument,
     page: BookPage,
@@ -155,7 +156,7 @@ internal fun PagedBookBody(
         val widthPx = constraints.maxWidth.coerceAtLeast(1)
         val bodyHeight = (constraints.maxHeight - with(density) { 30.dp.roundToPx() }).coerceAtLeast(1)
         val gap = with(density) { typography.paragraphSpacingDp.dp.roundToPx() }
-        val pages = remember(page.blocks, savedPhrases, palette, typography, fontSizeSp, lineHeightSp, widthPx, bodyHeight, density, measurer) {
+        val pages = remember(page.blocks, savedPhrases, tone, typography, fontSizeSp, lineHeightSp, widthPx, bodyHeight, density, measurer) {
             val sheets = mutableListOf<List<PagePiece>>()
             var sheet = mutableListOf<PagePiece>()
             var used = 0
@@ -174,7 +175,7 @@ internal fun PagedBookBody(
                     append(PagePiece(imagePath = block.imagePath, heightPx = (bodyHeight * 0.72f).toInt()))
                 }
                 val style = TextStyle(
-                    color = if (block.style == BlockStyle.QUOTE) palette.onSurfaceVariant else palette.onSurface,
+                    color = if (block.style == BlockStyle.QUOTE) tone.inkSoft else tone.ink,
                     fontFamily = typography.fontFamily.toComposeFontFamily(),
                     fontSize = (if (block.style == BlockStyle.HEADING) fontSizeSp + 4 else fontSizeSp).sp,
                     lineHeight = (if (block.style == BlockStyle.HEADING) lineHeightSp + 4 else lineHeightSp).sp,
@@ -183,7 +184,7 @@ internal fun PagedBookBody(
                     textAlign = typography.textAlignment.toComposeTextAlign(),
                     letterSpacing = 0.sp,
                 )
-                val annotated = buildHighlightedAnnotatedString(block.text, savedPhrases, palette)
+                val annotated = buildHighlightedAnnotatedString(block.text, savedPhrases, tone)
                 paginateText(annotated, style, widthPx, bodyHeight) { text, textStyle, width ->
                     measurer.measure(text, textStyle, constraints = Constraints.fixedWidth(width))
                 }.forEach(::append)
@@ -217,7 +218,7 @@ internal fun PagedBookBody(
                                 val image = bitmap
                                 if (image != null) Image(image, "Ilustración de la página ${page.pageNumber}", Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit,
-                                    colorFilter = pdfPageImageColorFilter(palette, pdfPageColorMode, book.format == DocumentFormat.PDF, false))
+                                    colorFilter = pdfPageImageColorFilter(palette, tone, pdfPageColorMode, book.format == DocumentFormat.PDF, false))
                             }
                         } else Text(piece.text, style = piece.style, modifier = Modifier.fillMaxWidth())
                     }
@@ -225,10 +226,10 @@ internal fun PagedBookBody(
             }
             Row(Modifier.fillMaxWidth().height(30.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (pages.size > 1) "Página ${page.pageNumber} · ${index + 1}/${pages.size}" else "",
-                    color = palette.textMuted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
+                    color = tone.muted, fontSize = 11.sp, modifier = Modifier.testTag("page_part_${page.pageNumber}"))
                 val text = pages[index].joinToString(" ") { it.text.text }
                 val candidate = remember(text) { extractCandidatePhrases(text).firstOrNull() }
-                if (candidate != null) Text("+ Frase", color = palette.primary, fontSize = 11.sp,
+                if (candidate != null) Text("+ Frase", color = tone.ink, fontSize = 11.sp,
                     modifier = Modifier.clayFocusableClickable(palette) { onQuickSavePhrase(candidate, text) }.padding(horizontal = 8.dp))
             }
         }
