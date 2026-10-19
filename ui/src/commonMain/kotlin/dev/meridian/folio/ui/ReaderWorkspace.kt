@@ -288,6 +288,7 @@ internal fun StitchDesktopTopNavigationBar(
                                 label = "A-",
                                 selected = false,
                                 onClick = { onFontSizeChange(fontSizePt - 1f) },
+                                tag = "reader_font_step_down",
                                 palette = palette,
                             )
                             Text(
@@ -300,6 +301,7 @@ internal fun StitchDesktopTopNavigationBar(
                                 label = "A+",
                                 selected = false,
                                 onClick = { onFontSizeChange(fontSizePt + 1f) },
+                                tag = "reader_font_step_up",
                                 palette = palette,
                             )
 

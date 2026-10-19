@@ -31,12 +31,12 @@ Fuente de verdad: proyecto Stitch **«Claymorphic App Redesign»** (`projects/14
 - El chrome (nav, barra del libro, dock, Biblioteca, Cuaderno, Ajustes) es SIEMPRE claro: `ClayTokens.chrome(...)`. No existe chrome oscuro.
 - El tema de lectura (`ReaderTheme.WHITE/SEPIA/SAGE/DARK`) se materializa SOLO con `ClayTokens.readingTone(theme, highContrast)` → `ReadingTone(isDark, sheet, ink, inkSoft, muted, border, accent)`:
   - hoja/página = `tone.sheet`; tinta = `tone.ink`/`inkSoft`/`muted`; bordes = `tone.border`; acentos dentro de la hoja = `tone.accent` (≥3:1 anotado contra su hoja).
-- Highlights dentro de la hoja: `Color(if (tone.isDark) tone.hexDark else tone.hexLight)` (helper `readingHighlight` en `ReaderWorkspace.kt`). `palette.highlightColor(tone)` es para superficies de chrome claro (p. ej. Cuaderno), NUNCA para la hoja.
+- Highlights dentro de la hoja: helper `readingHighlight(tone, highlight)` en `ReaderWorkspace.kt` → `Color(if (tone.isDark) highlight.hexDark else highlight.hexLight)`, donde `highlight` es un `HighlightTone`. `palette.highlightColor(...)` es para superficies de chrome claro (p. ej. Cuaderno), NUNCA para la hoja.
 - `palette.isDarkReading` no debe usarse para pintar la hoja (el chrome ya no es oscuro).
 
 ## Estructura de superficies (escritorio)
 
-- Shell: `MeridianFolioApp.kt` + `ShellChrome.kt` (`ClayTopNav`, `ClayBottomNav`, `ClayFooter`, `ClayLogoMark`, `BookmarkRibbon`, `ReaderToolbar`; `ClayBottomNavHeight = 76.dp`).
+- Shell: `MeridianFolioApp.kt` + `ShellChrome.kt` (`ClayTopNav`, `ClayBottomNav`, `ClayFooter`, `ClayLogoMark`, `ClayBookmarkRibbon`, `ClayReaderToolbar`; `ClayBottomNavHeight = 76.dp`).
 - Superficies en archivo propio: `LibraryWorkspace.kt`/`LibraryControls.kt`, `ReaderWorkspace.kt` (+ `ReaderViewModes.kt`, `ReaderPagination.kt`), `NotebookWorkspace.kt`, `SettingsWorkspace.kt`; diálogos en `EditingWorkspace.kt`.
 - Breakpoints vigentes: ≥1040 dp layout de dos columnas (Ajustes 7/5), ≥760 dp rail/grid, <700 dp el shell cambia a la maquetación móvil (`isMobileKindleView`). La pasada móvil claymorphism (= las 5 pantallas mobile del proyecto Stitch) está PENDIENTE.
 - Datos ficticios del mock están prohibidos: nada de sync falso, retención inventada, toasts decorativos o tonos inexistentes (p. ej. **"Clay Pastel" no existe** en core; los tonos reales son WHITE/SEPIA/SAGE/DARK). Donde el mock enseñe datos falsos, usar el dato real equivalente.
@@ -45,7 +45,7 @@ Fuente de verdad: proyecto Stitch **«Claymorphic App Redesign»** (`projects/14
 
 - `.\gradlew.bat :ui:desktopTest` — `VisualCaptureTest` captura las 4 superficies en ancho amplio/medio/estrecho → `ui/build/visual/{wide,mid,narrow}-{biblioteca,lector,cuaderno,ajustes}.png`. Regenera y revisa tras cada cambio visual.
 - Los `testTag` del contrato (ver `shiorifolio-code-review`) son la prueba de que cada superficie sigue montable; no renombrar jamás.
-- Antes de cerrar un cambio visual: chrome claro intacto, tono solo en la hoja, hit targets ≥48 dp, contraste ≥4.5:1 para texto y ≥3:1 para acentos en las 4 hojas.
+- Antes de cerrar un cambio visual: chrome claro intacto, tono solo en la hoja, alturas táctiles del kit (primarios/secundarios 48 dp; `ClayChromeAction` 40 dp; `ClayChip` ≥40 dp; `ClayToneSwatches` 38 dp — usa el elemento del kit antes que inventar tamaños), contraste ≥4.5:1 para texto y ≥3:1 para acentos en las 4 hojas.
 
 ## Prohibiciones explícitas
 
